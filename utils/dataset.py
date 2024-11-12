@@ -13,16 +13,16 @@ class XRayDataset(Dataset):
             self,
             is_train=True,
             transforms=None,
-            IMAGE_ROOT=None,
-            LABEL_ROOT=None,
-            CLASSES = []
+            img_root=None,
+            label_root=None,
+            classes = []
         ):
-        self.CLASSES = CLASSES
-        self.CLASS2IND = {v: i for i, v in enumerate(CLASSES)}
+        self.classes = classes
+        self.CLASS2IND = {v: i for i, v in enumerate(classes)}
         self.is_train = is_train
         self.transforms = transforms
-        self.img_root = IMAGE_ROOT
-        self.label_root = LABEL_ROOT
+        self.img_root = img_root
+        self.label_root = label_root
 
         _filenames, _labelnames = self.load_filenames()       
         self.filenames, self.labelnames= self.split_filenames(_filenames,_labelnames)
@@ -93,7 +93,7 @@ class XRayDataset(Dataset):
         label_path = os.path.join(self.label_root, label_name)
         
         # (H, W, NC) 모양의 label을 생성합니다.
-        label_shape = tuple(image.shape[:2]) + (len(self.CLASSES), )
+        label_shape = tuple(image.shape[:2]) + (len(self.classes), )
         label = np.zeros(label_shape, dtype=np.uint8)
         
         # label 파일을 읽습니다.
