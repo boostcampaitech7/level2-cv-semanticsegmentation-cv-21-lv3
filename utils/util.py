@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 
 def save_model(model,save_root, file_name='fcn_resnet50_best_model.pt'):
+    os.makedirs(save_root, exist_ok=True)
     output_path = os.path.join(save_root, file_name)
     torch.save(model, output_path)
 
@@ -28,7 +29,7 @@ def validation(epoch, model, data_loader, criterion, CLASSES, thr=0.5):
         total_loss = 0
         cnt = 0
 
-        for step, (images, masks) in tqdm(enumerate(data_loader), total=len(data_loader)):
+        for step, (images, masks) in tqdm.tqdm(enumerate(data_loader), total=len(data_loader)):
             images, masks = images.cuda(), masks.cuda()         
             model = model.cuda()
             

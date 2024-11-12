@@ -75,8 +75,6 @@ class XRayDataset(Dataset):
 
         pngs = sorted(pngs)
         jsons = sorted(jsons)
-
-        print(f"Loaded {len(pngs)} PNG files and {len(jsons)} JSON files.")
         return np.array(pngs), np.array(jsons)
 
     def __len__(self):

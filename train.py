@@ -72,7 +72,7 @@ def train(model,
                 print(f"Best performance at epoch: {epoch + 1}, {best_dice:.4f} -> {dice:.4f}")
                 print(f"Save model in {save_dir}")
                 best_dice = dice
-                save_model(model)
+                save_model(model,save_dir)
 
 def main():
     tf = A.Resize(512, 512)
