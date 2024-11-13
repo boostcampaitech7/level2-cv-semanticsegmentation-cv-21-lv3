@@ -1,8 +1,4 @@
 import random
-import json
-import time
-import os
-import sys
 
 import tqdm
 import numpy as np
@@ -14,12 +10,8 @@ import torch.optim as optim
 import torch.nn as nn
 
 from models.model import ModelSelector
-from utils.util import  save_model, validation 
+from utils.util import  save_model, validation, load_config 
 from utils.dataset import XRayDataset
-
-# 프로젝트 루트 디렉토리를 Python 경로에 추가
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
 
 def set_seed(seed):
     random.seed(seed)
@@ -32,12 +24,6 @@ def set_seed(seed):
 # 시드 고정
 set_seed(42)
 
-# 설정 파일 로드
-def load_config(config_path):
-    with open(config_path, 'r') as f:
-        return json.load(f)
-
-
 def train(model,
           data_loader,
           val_loader,
@@ -46,7 +32,8 @@ def train(model,
           num_epochs,
           interver,
           save_dir,
-          classes
+          classes,
+          model_name
     ):
 
     print(f'Start training..')
@@ -56,7 +43,9 @@ def train(model,
         model.train()
         for step, (images, masks) in tqdm.tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{num_epochs}'):
             images, masks = images.cuda(), masks.cuda()
-            outputs = model(images)['out']
+            outputs = model(images)
+            if isinstance(outputs, dict) and 'out' in outputs:
+                outputs = outputs['out']
             
             # Loss
             loss = criterion(outputs, masks)
@@ -70,9 +59,8 @@ def train(model,
             # Save CheckPoints
             if best_dice < dice:
                 print(f"Best performance at epoch: {epoch + 1}, {best_dice:.4f} -> {dice:.4f}")
-                print(f"Save model in {save_dir}")
                 best_dice = dice
-                save_model(model,save_dir)
+                save_model(model,save_dir,model_name)
 
 def main():
     tf = A.Resize(512, 512)
@@ -105,7 +93,6 @@ def main():
         num_workers=8,
         drop_last=True,
     )
-
     # 주의: validation data는 이미지 크기가 크기 때문에 `num_wokers`는 커지면 메모리 에러가 발생할 수 있습니다.
     valid_loader = DataLoader(
         dataset=valid_dataset, 
@@ -117,10 +104,8 @@ def main():
 
     # 모델 정의
     model_selector = ModelSelector(
-        model_type=config['model']['type'],
-        num_classes=n_class,
-        model_name=config['model']['name'],
-        pretrained=config['model']['pretrained'] 
+        config=config['model'],
+        num_classes=n_class
     )
     model = model_selector.get_model()
     model = model.cuda()
@@ -139,7 +124,8 @@ def main():
         num_epochs = config['NUM_EPOCHS'],
         interver = config['VAL_INTERVER'],
         save_dir = config['SAVED_DIR'],
-        classes = config['CLASSES']
+        classes = config['CLASSES'],
+        model_name = config['model']['model_name']
     )
 
 if __name__ == '__main__':

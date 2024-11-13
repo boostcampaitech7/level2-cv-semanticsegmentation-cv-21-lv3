@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torchvision.models.segmentation as models 
+import segmentation_models_pytorch as smp
 
 class TorchvisionModel(nn.Module):
     """
@@ -28,31 +29,62 @@ class TorchvisionModel(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+class SMPModel(nn.Module):
+    """
+    segmentation_models_pytorch에서 제공하는 사전 훈련된 모델을 사용하는 클래스.
+    """
+    def __init__(
+            self,
+            model_name: str,
+            encoder_name: str,
+            num_classes: int,
+            encoder_weights: str = 'imagenet'
+    ):
+        super(SMPModel, self).__init__()
+        
+        # SMP 모델 초기화
+        self.model = smp.__dict__[model_name](
+            encoder_name=encoder_name,
+            encoder_weights=encoder_weights,
+            classes=num_classes,
+            activation=None
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
 class ModelSelector:
     """
     사용할 모델 유형을 선택하는 클래스.
     """
     def __init__(
         self, 
-        model_type: str, 
-        num_classes: int, 
-        **kwargs
+        config: dict,
+        num_classes: int
     ):
         
         # 모델 유형에 따라 적절한 모델 객체를 생성
-        if model_type == 'simple':
-            self.model = None
+        if 'simple' in config['type'] :
+            self.model = None  # 기본 단순 모델이 정의되지 않았음.
         
-        elif model_type == 'torchvision':
-            self.model = TorchvisionModel(num_classes=num_classes, **kwargs)
+        elif 'torchvision' in config['type']:
+            self.model = TorchvisionModel(
+                model_name=config["model_name"],
+                num_classes=num_classes,
+                pretrained=config["pretrained"]
+            )
         
-        elif model_type == 'timm':
-            self.model = None
+        elif 'smp' in config['type']:
+            self.model = SMPModel(
+                model_name=config["model_name"],
+                encoder_name=config["encoder_name"],
+                num_classes=num_classes,
+                encoder_weights=config["encoder_weights"]
+            )
         
         else:
             raise ValueError("Unknown model type specified.")
 
     def get_model(self) -> nn.Module:
-
         # 생성된 모델 객체 반환
         return self.model

@@ -8,6 +8,49 @@ from sklearn.model_selection import GroupKFold
 import torch
 from torch.utils.data import Dataset
 
+
+class XRayInferenceDataset(Dataset):
+    def __init__(self, 
+                 transforms=None,
+                 img_root=None,
+                 classes = []
+                 ):
+        self.classes = classes
+        self.img_root = img_root
+        self.transforms = transforms
+        self.filenames = self.load_filenames()
+        
+    def load_filenames(self):
+        pngs = {
+            os.path.relpath(os.path.join(root, fname), start=self.img_root)
+            for root, _dirs, files in os.walk(self.img_root)
+            for fname in files
+            if os.path.splitext(fname)[1].lower() == ".png"
+        }
+        return np.array(sorted(pngs))
+
+    def __len__(self):
+        return len(self.filenames)
+    
+    def __getitem__(self, item):
+        image_name = self.filenames[item]
+        image_path = os.path.join(self.img_root, image_name)
+        
+        image = cv2.imread(image_path)
+        image = image / 255.
+        
+        if self.transforms is not None:
+            inputs = {"image": image}
+            result = self.transforms(**inputs)
+            image = result["image"]
+
+        # to tenser will be done later
+        image = image.transpose(2, 0, 1)  
+        
+        image = torch.from_numpy(image).float()
+            
+        return image, image_name
+
 class XRayDataset(Dataset):
     def __init__(
             self,
