@@ -1,6 +1,7 @@
 {   
     "IMAGE_ROOT": "../../data/train/DCM",
     "LABEL_ROOT": "../../data/train/outputs_json",
+    "TEST_IMAGE_ROOT" : "../../data/test/DCM",
     "SAVED_DIR": "checkpoints",
     "CLASSES": [
         "finger-1", "finger-2", "finger-3", "finger-4", "finger-5",
@@ -10,13 +11,13 @@
         "Trapezoid", "Capitate", "Hamate", "Scaphoid", "Lunate",
         "Triquetrum", "Pisiform", "Radius", "Ulna"
     ],
-    "NUM_EPOCHS": 5,
+    "NUM_EPOCHS": 1,
     "BATCH_SIZE": 8,
     "LR": 0.0001,
-    "VAL_INTERVER": 5,
+    "VAL_INTERVER": 1,
     "model": {
         "type": "torchvision",
-        "name": "fcn_resnet50",
+        "model_name": "fcn_resnet50",
         "pretrained": true
     }
 }
