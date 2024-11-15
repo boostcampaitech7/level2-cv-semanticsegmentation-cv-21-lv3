@@ -10,44 +10,45 @@ class CosineAnnealingWarmUpRestarts(_LRScheduler):
             raise ValueError("Expected integer T_mult >= 1, but got {}".format(T_mult))
         if T_up < 0 or not isinstance(T_up, int):
             raise ValueError("Expected positive integer T_up, but got {}".format(T_up))
-        self.T_0 = T_0
-        self.T_mult = T_mult
-        self.base_eta_max = eta_max
-        self.eta_max = eta_max
-        self.T_up = T_up
-        self.T_i = T_0
-        self.gamma = gamma
-        self.cycle = 0
-        self.T_cur = last_epoch
+        self.T_0 = T_0  # 첫 번째 주기의 길이 (epoch 단위)
+        self.T_mult = T_mult  # 각 주기가 늘어나는 비율
+        self.base_eta_max = eta_max  # 최대 학습률의 초기값 (변하지 않음)
+        self.eta_max = eta_max  # 현재 최대 학습률 (cycle이 진행되면서 감소할 수 있음)
+        self.T_up = T_up  # Warm-Up 기간
+        self.T_i = T_0  # 현재 주기의 길이
+        self.gamma = gamma  # 최대 학습률을 감소시키는 비율
+        self.cycle = 0  # 현재 cycle(재시작 횟수)
+        self.T_cur = last_epoch  # 현재 epoch 위치
         super(CosineAnnealingWarmUpRestarts, self).__init__(optimizer, last_epoch)
     
     def get_lr(self):
-        if self.T_cur == -1:
+        if self.T_cur == -1: # 초기 상태
             return self.base_lrs
-        elif self.T_cur < self.T_up:
+        elif self.T_cur < self.T_up: # Warm-Up 기간 (lr 선형적으로 증가)
             return [(self.eta_max - base_lr)*self.T_cur / self.T_up + base_lr for base_lr in self.base_lrs]
-        else:
+        else: # 주기 내 학습률 감소 (cosine 함수 형태로 감소)
             return [base_lr + (self.eta_max - base_lr) * (1 + math.cos(math.pi * (self.T_cur-self.T_up) / (self.T_i - self.T_up))) / 2
                     for base_lr in self.base_lrs]
 
+    # epoch마다 학습률 업데이트
     def step(self, epoch=None):
         if epoch is None:
             epoch = self.last_epoch + 1
             self.T_cur = self.T_cur + 1
-            if self.T_cur >= self.T_i:
+            if self.T_cur >= self.T_i: 
                 self.cycle += 1
                 self.T_cur = self.T_cur - self.T_i
                 self.T_i = (self.T_i - self.T_up) * self.T_mult + self.T_up
         else:
-            if epoch >= self.T_0:
+            if epoch >= self.T_0: # 첫 번째 주기 이후?
                 if self.T_mult == 1:
                     self.T_cur = epoch % self.T_0
                     self.cycle = epoch // self.T_0
                 else:
-                    n = int(math.log((epoch / self.T_0 * (self.T_mult - 1) + 1), self.T_mult))
+                    n = int(math.log((epoch / self.T_0 * (self.T_mult - 1) + 1), self.T_mult)) # 현재 epoch가 몇 번째 cycle인지
                     self.cycle = n
-                    self.T_cur = epoch - self.T_0 * (self.T_mult ** n - 1) / (self.T_mult - 1)
-                    self.T_i = self.T_0 * self.T_mult ** (n)
+                    self.T_cur = epoch - self.T_0 * (self.T_mult ** n - 1) / (self.T_mult - 1) # 현재 cycle 내 위치
+                    self.T_i = self.T_0 * self.T_mult ** (n) # 현재 cycle의 길이
             else:
                 self.T_i = self.T_0
                 self.T_cur = epoch
