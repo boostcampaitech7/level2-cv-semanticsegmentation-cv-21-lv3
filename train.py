@@ -12,6 +12,7 @@ import torch.nn as nn
 from models.model import ModelSelector
 from utils.util import  save_model, validation, load_config 
 from utils.dataset import XRayDataset
+from utils.loss import LRSchedulerSelector
 
 def set_seed(seed):
     random.seed(seed)
@@ -29,6 +30,7 @@ def train(model,
           val_loader,
           criterion,
           optimizer,
+          scheduler,
           num_epochs,
           interver,
           save_dir,
@@ -98,7 +100,7 @@ def main():
         dataset=valid_dataset, 
         batch_size=8,
         shuffle=False,
-        num_workers=0,
+        num_workers=8, # CPU 코어 수에 따라 조정
         drop_last=False
     )
 
@@ -115,12 +117,20 @@ def main():
     # Optimizer를 정의합니다.
     optimizer = optim.Adam(params=model.parameters(), lr=config['LR'], weight_decay=1e-6)
 
+    # Scheduler 설정
+    scheduler = None
+    if 'lr_scheduler' in config:
+        scheduler_selector = LRSchedulerSelector(optimizer, config['lr_scheduler'])
+        scheduler = scheduler_selector.get_scheduler()
+
+
     train(
         model,
         train_loader,
         valid_loader,
         criterion,
         optimizer,
+        scheduler,
         num_epochs = config['NUM_EPOCHS'],
         interver = config['VAL_INTERVER'],
         save_dir = config['SAVED_DIR'],

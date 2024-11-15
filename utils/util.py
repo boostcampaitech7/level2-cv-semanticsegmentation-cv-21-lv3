@@ -6,7 +6,6 @@ import numpy as np
 
 import torch
 import torch.nn.functional as F
-
 # 설정 파일 로드
 def load_config(config_path):
     with open(config_path, 'r') as f:
@@ -59,14 +58,16 @@ def validation(epoch, model, data_loader, criterion, CLASSES, thr=0.5):
         total_loss = 0
         cnt = 0
 
+
         for step, (images, masks) in tqdm.tqdm(enumerate(data_loader), total=len(data_loader)):
+            
             images, masks = images.cuda(), masks.cuda()         
             model = model.cuda()
-            
+
             outputs = model(images)
             if isinstance(outputs, dict) and 'out' in outputs:
                 outputs = outputs['out']
-            
+
             output_h, output_w = outputs.size(-2), outputs.size(-1)
             mask_h, mask_w = masks.size(-2), masks.size(-1)
             
@@ -77,14 +78,14 @@ def validation(epoch, model, data_loader, criterion, CLASSES, thr=0.5):
             loss = criterion(outputs, masks)
             total_loss += loss
             cnt += 1
-            
+
             outputs = torch.sigmoid(outputs)
-            outputs = (outputs > thr).detach().cpu()
-            masks = masks.detach().cpu()
-            
+            outputs = (outputs > thr).detach()
+            masks = masks.detach()
+
             dice = dice_coef(outputs, masks)
             dices.append(dice)
-                
+
     dices = torch.cat(dices, 0)
     dices_per_class = torch.mean(dices, 0)
     dice_str = [
@@ -95,5 +96,5 @@ def validation(epoch, model, data_loader, criterion, CLASSES, thr=0.5):
     print(dice_str)
     
     avg_dice = torch.mean(dices_per_class).item()
-    
+
     return avg_dice
