@@ -1,4 +1,7 @@
+/data
 /code
 /checkpoints
 /output
+/results
 *.pyc
+*.ipynb
