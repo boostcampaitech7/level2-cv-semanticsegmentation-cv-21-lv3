@@ -41,7 +41,8 @@ def train(model,
     
     # WandB 초기화
     wandb.init(
-        project="xray-segmentation",
+        entity="ppp6131-yonsei-university",
+        project="boostcamp7th_semantic_segmentation",
         config=config,
         name=model_name,
     )
