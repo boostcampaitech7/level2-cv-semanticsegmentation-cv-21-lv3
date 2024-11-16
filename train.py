@@ -161,6 +161,12 @@ def main():
 
     # Optimizer를 정의합니다.
     optimizer = optim.Adam(params=model.parameters(), lr=config['LR'], weight_decay=1e-6)
+    
+    # Scheduler 설정
+    scheduler = None
+    if 'lr_scheduler' in config:
+        scheduler_selector = LRSchedulerSelector(optimizer, config['lr_scheduler'])
+        scheduler = scheduler_selector.get_scheduler()
 
     # wandb에 기록할 config 설정
     wandb_config = {
