@@ -1,5 +1,5 @@
 import random
-
+import wandb
 import tqdm
 import numpy as np
 import albumentations as A
@@ -10,7 +10,7 @@ import torch.optim as optim
 import torch.nn as nn
 
 from models.model import ModelSelector
-from utils.util import  save_model, validation, load_config 
+from utils.util import save_model, validation, load_config 
 from utils.dataset import XRayDataset
 from utils.loss import LRSchedulerSelector
 
@@ -35,36 +35,79 @@ def train(model,
           interver,
           save_dir,
           classes,
-          model_name
+          model_name,
+          config
     ):
+    
+    # WandB 초기화
+    wandb.init(
+        project="xray-segmentation",
+        config=config,
+        name=model_name,
+    )
+    
+    # 모델 구조 로깅
+    wandb.watch(model, criterion, log="all", log_freq=100)
 
     print(f'Start training..')
     best_dice = 0.
     
     for epoch in range(num_epochs):
         model.train()
-        for step, (images, masks) in tqdm.tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{num_epochs}'):
+        epoch_loss = 0.0
+        
+        # Training loop
+        for step, (images, masks) in tqdm.tqdm(enumerate(data_loader), 
+                                             total=len(data_loader), 
+                                             desc=f'Epoch {epoch+1}/{num_epochs}'):
             images, masks = images.cuda(), masks.cuda()
             outputs = model(images)
             if isinstance(outputs, dict) and 'out' in outputs:
                 outputs = outputs['out']
             
-            # Loss
+            # Loss 계산
             loss = criterion(outputs, masks)
+            epoch_loss += loss.item()
+            
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+        
+        # 에폭당 평균 train loss 계산
+        avg_train_loss = epoch_loss / len(data_loader)
             
-        #Valid Interver     
+        # Validation 단계
         if (epoch + 1) % interver == 0:
+            # utils.validation에서 구현된 validation 함수 사용
             dice = validation(epoch + 1, model, val_loader, criterion, classes)
+            
+            # WandB에 메트릭 로깅
+            wandb.log({
+                "epoch": epoch + 1,
+                "learning_rate": optimizer.param_groups[0]['lr'],
+                "train_loss": avg_train_loss,
+                "dice_coefficient": dice
+            })
+            
             # Save CheckPoints
             if best_dice < dice:
                 print(f"Best performance at epoch: {epoch + 1}, {best_dice:.4f} -> {dice:.4f}")
                 best_dice = dice
-                save_model(model,save_dir,model_name)
+                save_model(model, save_dir, model_name)
+                
+                # Best 모델을 WandB에 저장
+                artifact = wandb.Artifact(
+                    name=f"{model_name}_best", 
+                    type="model",
+                    description=f"Best model with dice score: {dice:.4f}"
+                )
+                artifact.add_file(f"{save_dir}/{model_name}.pth")
+                wandb.log_artifact(artifact)
 
 def main():
+    # WandB 로그인
+    wandb.login()
+    
     tf = A.Resize(512, 512)
     
     config = load_config('./config/config.json')  # config.json 로드
@@ -100,7 +143,7 @@ def main():
         dataset=valid_dataset, 
         batch_size=8,
         shuffle=False,
-        num_workers=8, # CPU 코어 수에 따라 조정
+        num_workers=0,
         drop_last=False
     )
 
@@ -111,18 +154,24 @@ def main():
     )
     model = model_selector.get_model()
     model = model.cuda()
+    
     # Loss function을 정의합니다.
     criterion = nn.BCEWithLogitsLoss()
 
     # Optimizer를 정의합니다.
     optimizer = optim.Adam(params=model.parameters(), lr=config['LR'], weight_decay=1e-6)
 
-    # Scheduler 설정
-    scheduler = None
-    if 'lr_scheduler' in config:
-        scheduler_selector = LRSchedulerSelector(optimizer, config['lr_scheduler'])
-        scheduler = scheduler_selector.get_scheduler()
-
+    # wandb에 기록할 config 설정
+    wandb_config = {
+        "learning_rate": config['LR'],
+        "batch_size": batch_size,
+        "optimizer": "Adam",
+        "weight_decay": 1e-6,
+        "model": config['model']['model_name'],
+        "epochs": config['NUM_EPOCHS'],
+        "image_size": 512,
+        "validation_interval": config['VAL_INTERVER']
+    }
 
     train(
         model,
@@ -130,12 +179,12 @@ def main():
         valid_loader,
         criterion,
         optimizer,
-        scheduler,
-        num_epochs = config['NUM_EPOCHS'],
-        interver = config['VAL_INTERVER'],
-        save_dir = config['SAVED_DIR'],
-        classes = config['CLASSES'],
-        model_name = config['model']['model_name']
+        num_epochs=config['NUM_EPOCHS'],
+        interver=config['VAL_INTERVER'],
+        save_dir=config['SAVED_DIR'],
+        classes=config['CLASSES'],
+        model_name=config['model']['model_name'],
+        config=wandb_config
     )
 
 if __name__ == '__main__':
