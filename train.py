@@ -36,6 +36,8 @@ def train(model,
           save_dir,
           classes,
           model_name,
+          save_name,
+          save_group,
           mixed_precision,
           accumulation_steps,
           config
@@ -51,6 +53,7 @@ def train(model,
         project="boostcamp7th_semantic_segmentation",
         config=config,
         name=model_name,
+        group=save_group
     )
     
     # 모델 구조 로깅
@@ -137,6 +140,9 @@ def main():
     classes = config['CLASSES']
     batch_size = config['BATCH_SIZE']
     n_class = len(classes)
+    model_name = config['model']['model_name']
+    save_name = f'{model_name}_{config["LR"]}_{batch_size}'+time.strftime("%Y%m%d_%H%M%S") if not config['lr_scheduler'] else f'{model_name}_{config["lr_scheduler"]}_{batch_size}'+time.strftime("%Y%m%d_%H%M%S")
+    save_group = model_name # model name, augmentation, scheduler
 
     train_dataset = XRayDataset(
         is_train=True,
@@ -222,7 +228,9 @@ def main():
         interver=config['VAL_INTERVER'],
         save_dir=config['SAVED_DIR'],
         classes=config['CLASSES'],
-        model_name=config['model']['model_name'],
+        model_name=model_name,
+        save_name=save_name,
+        save_group=save_group,
         config=wandb_config,
         mixed_precision=mixed_precision,
         accumulation_steps=accumulation_steps
