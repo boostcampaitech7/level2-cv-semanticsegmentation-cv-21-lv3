@@ -10,9 +10,10 @@ import torch.optim as optim
 import torch.nn as nn
 
 from models.model import ModelSelector
-from utils.util import save_model, validation, load_config 
+from utils.util import save_model, iou, validation, load_config 
 from utils.dataset import XRayDataset
-from utils.loss import LRSchedulerSelector
+from utils.scheduler import LRSchedulerSelector
+from utils.loss import LossSelector
 
 def set_seed(seed):
     random.seed(seed)
@@ -56,6 +57,7 @@ def train(model,
     for epoch in range(num_epochs):
         model.train()
         epoch_loss = 0.0
+        epoch_iou_loss = 0.0
         
         # Training loop
         for step, (images, masks) in tqdm.tqdm(enumerate(data_loader), 
@@ -69,25 +71,37 @@ def train(model,
             # Loss 계산
             loss = criterion(outputs, masks)
             epoch_loss += loss.item()
+
+            # IoU Loss 계산
+            outputs = torch.sigmoid(outputs)
+            outputs = (outputs > 0.5).float() # threshold 적용
+            iou_loss_value = (1.0 - iou(masks, outputs)).mean
+            epoch_iou_loss += iou_loss_value.item()
             
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         
-        # 에폭당 평균 train loss 계산
+        # 에폭당 평균 train loss / train iou loss 계산
         avg_train_loss = epoch_loss / len(data_loader)
+        avg_train_iou_loss = epoch_iou_loss / len(data_loader)
+
+        # 로그 출력
+        print(f"Epoch [{epoch+1}/{num_epochs}] - Avg Train Loss: {avg_train_loss:.4f}, Avg IoU Loss: {avg_train_iou_loss:.4f}")
             
         # Validation 단계
         if (epoch + 1) % interver == 0:
             # utils.validation에서 구현된 validation 함수 사용
-            dice = validation(epoch + 1, model, val_loader, criterion, classes)
+            dice, iou = validation(epoch + 1, model, val_loader, criterion, classes)
             
             # WandB에 메트릭 로깅
             wandb.log({
                 "epoch": epoch + 1,
                 "learning_rate": optimizer.param_groups[0]['lr'],
                 "train_loss": avg_train_loss,
-                "dice_coefficient": dice
+                "train_iou_loss": avg_train_iou_loss,
+                "dice_coefficient": dice,
+                "iou": iou
             })
             
             # Save CheckPoints
@@ -139,7 +153,7 @@ def main():
         num_workers=8,
         drop_last=True,
     )
-    # 주의: validation data는 이미지 크기가 크기 때문에 `num_wokers`는 커지면 메모리 에러가 발생할 수 있습니다.
+    # 주의: validation data는 이미지 크기가 크기 때문에 `num_workers`는 커지면 메모리 에러가 발생할 수 있습니다.
     valid_loader = DataLoader(
         dataset=valid_dataset, 
         batch_size=8,
@@ -157,16 +171,18 @@ def main():
     model = model.cuda()
     
     # Loss function을 정의합니다.
-    criterion = nn.BCEWithLogitsLoss()
+    # criterion = nn.BCEWithLogitsLoss()
+    loss_selector = LossSelector(config['loss'])
+    criterion = loss_selector.get_loss()
 
     # Optimizer를 정의합니다.
     optimizer = optim.Adam(params=model.parameters(), lr=config['LR'], weight_decay=1e-6)
     
     # Scheduler 설정
     scheduler = None
-    if 'lr_scheduler' in config:
-        scheduler_selector = LRSchedulerSelector(optimizer, config['lr_scheduler'])
-        scheduler = scheduler_selector.get_scheduler()
+    # if 'lr_scheduler' in config:
+    #     scheduler_selector = LRSchedulerSelector(optimizer, config['lr_scheduler'])
+    #     scheduler = scheduler_selector.get_scheduler()
 
     # wandb에 기록할 config 설정
     wandb_config = {

@@ -11,7 +11,7 @@
         "Trapezoid", "Capitate", "Hamate", "Scaphoid", "Lunate",
         "Triquetrum", "Pisiform", "Radius", "Ulna"
     ],
-    "NUM_EPOCHS": 1,
+    "NUM_EPOCHS": 150,
     "BATCH_SIZE": 8,
     "LR": 0.0001,
     "VAL_INTERVER": 1,
@@ -22,7 +22,7 @@
         "encoder_weights":"imagenet"
     },
     "loss": {
-        "type": "diceloss",
+        "type": "bcewithlogitsloss",
         "DiceLoss / GeneralizedDiceLoss_params_annotations": {
             "include_background": "배경 제외 여부 인자                           (Default = True)",
             "softmax": "softmax 활성화 함수 사용 여부 인자                        (Default = True)",
