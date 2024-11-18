@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from utils.util import encode_mask_to_rle, load_config
 from utils.dataset import XRayInferenceDataset
 
-def save_csv(rles, filename_and_class,save_root='./output/'):
+def save_csv(rles, filename_and_class, save_root='./output/'):
     classes, filename = zip(*[x.split("_") for x in filename_and_class])
     image_name = [os.path.basename(f) for f in filename]
     
@@ -55,13 +55,16 @@ def test(model, data_loader, classes, thr=0.5):
 
 def main():
     config = load_config('./config/config.json')
+    model_path = f"{config['SAVED_DIR']}/{config['model']['model_name']}_best_model.pt"
+    os.path.exists(model_path)
+
+    model = torch.load(model_path)
     classes = config['CLASSES']
-    model = torch.load(os.path.join(config['SAVED_DIR'], "fcn_resnet50_best_model.pt"))
 
     tf = A.Resize(512, 512)
     test_dataset = XRayInferenceDataset(
         transforms=tf,
-        img_root=config['TEST_IMAGE_ROOT'],
+        img_root=f"{config['DATA_ROOT']}/test/DCM",
         classes=classes)
     
     test_loader = DataLoader(
@@ -71,8 +74,9 @@ def main():
         num_workers=8,
         drop_last=False
     )
-
+    print("testing..")
     rles, filename_and_class = test(model, test_loader,classes)
+    print(rles, filename_and_class)
     save_csv(rles, filename_and_class)
 
 if __name__ == '__main__':
