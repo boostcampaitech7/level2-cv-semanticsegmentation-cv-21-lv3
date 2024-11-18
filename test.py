@@ -74,9 +74,7 @@ def main():
         num_workers=8,
         drop_last=False
     )
-    print("testing..")
     rles, filename_and_class = test(model, test_loader,classes)
-    print(rles, filename_and_class)
     save_csv(rles, filename_and_class)
 
 if __name__ == '__main__':
