@@ -1,5 +1,6 @@
 import os
 import json
+import random
 
 import tqdm
 import numpy as np
@@ -23,22 +24,6 @@ def encode_mask_to_rle(mask):
     runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
     runs[1::2] -= runs[::2]
     return ' '.join(str(x) for x in runs)
-
-def save_model(model, save_root, model_name=None):
-    # 모델 이름을 지정하지 않으면 클래스 이름으로 설정
-    if model_name is None:
-        model_name = model.__class__.__name__
-
-    # 파일명을 모델 이름에 맞게 설정
-    file_name = f"{model_name}_best_model.pt"
-    
-    # 저장 디렉토리 생성
-    os.makedirs(save_root, exist_ok=True)
-    
-    # 모델 저장
-    output_path = os.path.join(save_root, file_name)
-    torch.save(model, output_path)
-    print(f"Model saved to {output_path}")
 
 def dice_coef(y_true, y_pred):
     y_true_f = y_true.flatten(2)
@@ -70,6 +55,14 @@ def iou(y_true, y_pred):
     
     # Calculate IoU
     return (intersection + eps) / (union + eps)
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 def validation(epoch, model, data_loader, criterion, CLASSES, thr=0.5):
     print(f'Start validation #{epoch:2d}')

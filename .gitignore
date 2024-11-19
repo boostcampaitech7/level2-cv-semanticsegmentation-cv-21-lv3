@@ -3,6 +3,7 @@
 /checkpoints
 /output
 /results
+/config
 wandb*
 *.log
 *.pyc

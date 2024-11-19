@@ -91,7 +91,7 @@ class XRayDataset(Dataset):
                 labelnames += list(_labelnames[y])
             else:
                 filenames = list(_filenames[y])
-                labelnames = list(self._labelnames[y])
+                labelnames = list(_labelnames[y])
                                 
         return filenames, labelnames
     
