@@ -181,6 +181,12 @@ def main():
     model = model_selector.get_model()
     model = model.cuda()
     
+    # Scheduler 설정
+    scheduler = None
+    # if 'lr_scheduler' in config:
+    #     scheduler_selector = LRSchedulerSelector(optimizer, config['lr_scheduler'])
+    #     scheduler = scheduler_selector.get_scheduler()
+    
     # Loss function을 정의합니다.
     criterion = nn.BCEWithLogitsLoss()
 
