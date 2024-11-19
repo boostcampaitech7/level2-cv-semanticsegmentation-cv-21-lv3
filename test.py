@@ -1,4 +1,5 @@
 import os
+import argparse
 
 import tqdm
 import pandas as pd
@@ -54,8 +55,13 @@ def test(model, data_loader, classes, thr=0.5):
     return rles, filename_and_class
 
 def main():
+    # argparser
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_path', type=str, required=True, help='Path to the model file')
+    args = parser.parse_args()
+    
     config = load_config('./config/config.json')
-    model_path = f"{config['SAVED_DIR']}/{config['model']['model_name']}_best_model.pt"
+    model_path = args.model_path 
     os.path.exists(model_path)
 
     model = torch.load(model_path)
