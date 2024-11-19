@@ -240,9 +240,6 @@ def main():
         "validation_interval": config['VAL_INTERVER']
     }
 
-    # import logging
-    # logging.warning(f"Num_epochs {config['NUM_EPOCHS']}")
-
     train(
         model,
         train_loader,
