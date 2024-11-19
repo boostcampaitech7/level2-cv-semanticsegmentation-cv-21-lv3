@@ -4,3 +4,5 @@ scikit-learn==1.5.2
 albumentations==1.4.18
 matplotlib==3.9.2
 segmentation-models-pytorch==0.3.0
+tmux
+tqdm
