@@ -3,5 +3,7 @@
 /checkpoints
 /output
 /results
+wandb*
+*.log
 *.pyc
 *.ipynb
