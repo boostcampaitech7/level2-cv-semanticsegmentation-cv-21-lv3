@@ -3,8 +3,6 @@ import time
 
 import wandb
 from tqdm import tqdm
-import wandb
-from tqdm import tqdm
 import numpy as np
 import albumentations as A
 
@@ -14,7 +12,6 @@ import torch.optim as optim
 import torch.nn as nn
 
 from models.model import ModelSelector
-from utils.util import save_model, validation, load_config 
 from utils.util import save_model, validation, load_config 
 from utils.dataset import XRayDataset
 from utils.loss import LRSchedulerSelector
@@ -45,31 +42,10 @@ def train(model,
           mixed_precision,
           accumulation_steps,
           config
-          model_name,
-          save_name,
-          save_group,
-          mixed_precision,
-          accumulation_steps,
-          config
     ):
-    
     
     print(f'Start training..')
     best_dice = 0.
-    scaler = torch.cuda.amp.GradScaler()
-    
-    # WandB 초기화
-    wandb.init(
-        entity="ppp6131-yonsei-university",
-        project="boostcamp7th_semantic_segmentation",
-        config=config,
-        name=model_name,
-        group=save_group
-    )
-    
-    # 모델 구조 로깅
-    wandb.watch(model, criterion, log="all", log_freq=100)
-
     scaler = torch.cuda.amp.GradScaler()
     
     # WandB 초기화
@@ -90,14 +66,8 @@ def train(model,
         
         # Training loop
         for step, (images, masks) in tqdm(enumerate(data_loader), 
-                                             total=len(data_loader), 
-                                             desc=f'Epoch {epoch+1}/{num_epochs}'):
-        epoch_loss = 0.0
-        
-        # Training loop
-        for step, (images, masks) in tqdm(enumerate(data_loader), 
-                                             total=len(data_loader), 
-                                             desc=f'Epoch {epoch+1}/{num_epochs}'):
+                                        total=len(data_loader), 
+                                        desc=f'Epoch {epoch+1}/{num_epochs}'):
             images, masks = images.cuda(), masks.cuda()
 
             # Train loss
@@ -114,37 +84,8 @@ def train(model,
             else:
                 loss.backward()
             
-            #Gradient Accumulation
-            if(step + 1) % accumulation_steps == 0 or (step + 1) == len(data_loader):
-                if mixed_precision:
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    optimizer.step()
-                optimizer.zero_grad()
-
-        # 에폭당 평균 train loss 계산
-        avg_train_loss = epoch_loss / len(data_loader)
-        print(f"Epoch[{epoch+1}/{num_epochs}] Completed. Avg Loss: {avg_train_loss:.4f}")
-        
-        # Validation 단계
-
-            # Train loss
-            with torch.cuda.amp.autocast(enabled=mixed_precision):
-                outputs = model(images)
-                if isinstance(outputs, dict) and 'out' in outputs:
-                    outputs = outputs['out']
-                loss = criterion(outputs, masks)
-                epoch_loss += loss.item()
-
-            # Backpropagation
-            if mixed_precision:   
-                scaler.scale(loss).backward()               
-            else:
-                loss.backward()
-            
-            #Gradient Accumulation
-            if(step + 1) % accumulation_steps == 0 or (step + 1) == len(data_loader):
+            # Gradient Accumulation
+            if (step + 1) % accumulation_steps == 0 or (step + 1) == len(data_loader):
                 if mixed_precision:
                     scaler.step(optimizer)
                     scaler.update()
@@ -158,18 +99,7 @@ def train(model,
         
         # Validation 단계
         if (epoch + 1) % interver == 0:
-            # utils.validation에서 구현된 validation 함수 사용
-            # utils.validation에서 구현된 validation 함수 사용
             dice = validation(epoch + 1, model, val_loader, criterion, classes)
-            
-            # WandB에 메트릭 로깅
-            wandb.log({
-                "epoch": epoch + 1,
-                "learning_rate": optimizer.param_groups[0]['lr'],
-                "train_loss": avg_train_loss,
-                "dice_coefficient": dice
-            })
-            
             
             # WandB에 메트릭 로깅
             wandb.log({
@@ -188,7 +118,7 @@ def train(model,
                 wandb.unwatch(model)
                 save_model(model, save_dir, save_name)
                 
-                #Best 모델을 WandB에 저장 -> Test 모델 형태랑 충돌
+                # Best 모델을 WandB에 저장
                 artifact = wandb.Artifact(
                     name=f"{save_name}_best", 
                     type="model",
@@ -201,15 +131,9 @@ def main():
     # WandB 로그인
     wandb.login()
     
-    # WandB 로그인
-    wandb.login()
-    
     tf = A.Resize(512, 512)
     
     config = load_config('./config/config.json')  # config.json 로드
-    data_root = config['DATA_ROOT']
-    img_root = f"{data_root}/train/DCM"
-    label_root = f"{data_root}/train/outputs_json"
     data_root = config['DATA_ROOT']
     img_root = f"{data_root}/train/DCM"
     label_root = f"{data_root}/train/outputs_json"
@@ -218,8 +142,7 @@ def main():
     n_class = len(classes)
     model_name = config['model']['model_name']
     save_name = f'{model_name}_{config["LR"]}_{batch_size}'+time.strftime("%Y%m%d_%H%M%S") if not config['lr_scheduler'] else f'{model_name}_{config["lr_scheduler"]}_{batch_size}'+time.strftime("%Y%m%d_%H%M%S")
-    save_group = model_name # model name, augmentation, scheduler
-
+    save_group = model_name
 
     train_dataset = XRayDataset(
         is_train=True,
@@ -242,12 +165,10 @@ def main():
         num_workers=8,
         drop_last=True,
     )
-    # 주의: validation data는 이미지 크기가 크기 때문에 `num_wokers`는 커지면 메모리 에러가 발생할 수 있습니다.
     valid_loader = DataLoader(
         dataset=valid_dataset, 
         batch_size=4,
         shuffle=False,
-        num_workers=8,
         num_workers=8,
         drop_last=False
     )
@@ -260,31 +181,17 @@ def main():
     model = model_selector.get_model()
     model = model.cuda()
     
-    
     # Loss function을 정의합니다.
     criterion = nn.BCEWithLogitsLoss()
 
     # Optimizer를 정의합니다.
     optimizer = optim.Adam(params=model.parameters(), lr=config['LR'], weight_decay=1e-6)
     
-    
-    # Scheduler 설정
-    scheduler = None
-    # if 'lr_scheduler' in config:
-    #     scheduler_selector = LRSchedulerSelector(optimizer, config['lr_scheduler'])
-    #     scheduler = scheduler_selector.get_scheduler()
-
     # mixed_precision 설정
-    if 'mixed_precision' in config:
-        mixed_precision = config['mixed_precision']
-    else:
-        mixed_precision = True
+    mixed_precision = config.get('mixed_precision', True)
 
     # Gradient Accumulation_steps 설정
-    if 'accumulation_steps' in config:
-        accumulation_steps = config['accumulation_steps']
-    else:
-        accumulation_steps = 1
+    accumulation_steps = config.get('accumulation_steps', 1)
 
     # wandb에 기록할 config 설정
     wandb_config = {
@@ -304,16 +211,6 @@ def main():
         valid_loader,
         criterion,
         optimizer,
-        num_epochs=config['NUM_EPOCHS'],
-        interver=config['VAL_INTERVER'],
-        save_dir=config['SAVED_DIR'],
-        classes=config['CLASSES'],
-        model_name=model_name,
-        save_name=save_name,
-        save_group=save_group,
-        config=wandb_config,
-        mixed_precision=mixed_precision,
-        accumulation_steps=accumulation_steps
         num_epochs=config['NUM_EPOCHS'],
         interver=config['VAL_INTERVER'],
         save_dir=config['SAVED_DIR'],
