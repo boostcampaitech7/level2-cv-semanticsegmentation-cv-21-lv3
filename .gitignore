@@ -3,6 +3,7 @@
 /checkpoints
 /output
 /results
+/wandb
 *.pyc
 *.ipynb
 wandb*
