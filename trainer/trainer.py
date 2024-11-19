@@ -26,8 +26,8 @@ class Trainer:
         self.scaler = torch.cuda.amp.GradScaler()
         self.num_epochs = config['NUM_EPOCHS']
         self.interver = config['VAL_INTERVER']
-        self.best_dice = float('-inf')
-        self.best_iou = float('-inf')
+        self.best_dice = 0.
+        self.best_iou = 0.
         self.model_name = config['model']['model_name']
         self.save_dir = config['SAVED_DIR']
         self.classes = config['CLASSES']
