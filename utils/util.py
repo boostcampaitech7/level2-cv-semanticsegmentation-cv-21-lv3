@@ -48,11 +48,35 @@ def dice_coef(y_true, y_pred):
     eps = 0.0001
     return (2. * intersection + eps) / (torch.sum(y_true_f, -1) + torch.sum(y_pred_f, -1) + eps)
 
+def iou(y_true, y_pred): 
+    """
+    IoU (Intersection over Union) 계산 함수
+    :param y_true: Ground truth tensor
+    :param y_pred: Predicted tensor
+    :return: IoU 값 (Tensor 형태)
+    """
+    # Flatten tensors along the spatial dimensions
+    y_true_f = y_true.flatten(2)
+    y_pred_f = y_pred.flatten(2)
+    
+    # Calculate intersection
+    intersection = torch.sum(y_true_f * y_pred_f, -1)
+    
+    # Calculate union
+    union = torch.sum(y_true_f, -1) + torch.sum(y_pred_f, -1) - intersection
+    
+    # Small epsilon to avoid division by zero
+    eps = 0.0001
+    
+    # Calculate IoU
+    return (intersection + eps) / (union + eps)
+
 def validation(epoch, model, data_loader, criterion, CLASSES, thr=0.5):
     print(f'Start validation #{epoch:2d}')
     model.eval()
 
     dices = []
+    ious = []
     with torch.no_grad():
         n_class = len(CLASSES)
         total_loss = 0
@@ -75,26 +99,36 @@ def validation(epoch, model, data_loader, criterion, CLASSES, thr=0.5):
             if output_h != mask_h or output_w != mask_w:
                 outputs = F.interpolate(outputs, size=(mask_h, mask_w), mode="bilinear")
             
+            # Loss 계산
             loss = criterion(outputs, masks)
             total_loss += loss
             cnt += 1
 
+            # threshold 적용
             outputs = torch.sigmoid(outputs)
             outputs = (outputs > thr).detach()
             masks = masks.detach()
 
+            # Dice Coefficient 계산
             dice = dice_coef(outputs, masks)
             dices.append(dice)
 
+            # IoU 계산
+            iou_value = iou(masks, outputs)
+            ious.append(iou_value)
+
     dices = torch.cat(dices, 0)
     dices_per_class = torch.mean(dices, 0)
-    dice_str = [
-        f"{c:<12}: {d.item():.4f}"
-        for c, d in zip(CLASSES, dices_per_class)
+    ious = torch.cat(ious, 0)
+    ious_per_class = torch.mean(ious, 0)
+    metrics_str = [
+        f"{c:<12}: Dice={d.item():.4f}, IoU={i.item():.4f}"
+        for c, d, i in zip(CLASSES, dices_per_class, ious_per_class)
     ]
-    dice_str = "\n".join(dice_str)
-    print(dice_str)
+    metrics_str = "\n".join(metrics_str)
+    print(metrics_str)
     
     avg_dice = torch.mean(dices_per_class).item()
+    avg_iou = torch.mean(ious_per_class).item()
 
-    return avg_dice
+    return avg_dice, avg_iou

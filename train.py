@@ -1,7 +1,7 @@
 import random
-import time
 
 import wandb
+import time
 from tqdm import tqdm
 import numpy as np
 import albumentations as A
@@ -12,9 +12,10 @@ import torch.optim as optim
 import torch.nn as nn
 
 from models.model import ModelSelector
-from utils.util import save_model, validation, load_config 
+from utils.util import save_model, iou, validation, load_config 
 from utils.dataset import XRayDataset
-from utils.loss import LRSchedulerSelector
+from utils.scheduler import LRSchedulerSelector
+from utils.loss import LossSelector
 
 def set_seed(seed):
     random.seed(seed)
@@ -32,6 +33,7 @@ def train(model,
           val_loader,
           criterion,
           optimizer,
+          scheduler,
           num_epochs,
           interver,
           save_dir,
@@ -43,11 +45,12 @@ def train(model,
           accumulation_steps,
           config
     ):
-    
+
     print(f'Start training..')
     best_dice = 0.
+    best_iou = 0.
     scaler = torch.cuda.amp.GradScaler()
-    
+
     # WandB 초기화
     wandb.init(
         entity="ppp6131-yonsei-university",
@@ -59,73 +62,88 @@ def train(model,
     
     # 모델 구조 로깅
     wandb.watch(model, criterion, log="all", log_freq=100)
-
+    
     for epoch in range(num_epochs):
         model.train()
         epoch_loss = 0.0
+        epoch_iou_loss = 0.0
         
         # Training loop
         for step, (images, masks) in tqdm(enumerate(data_loader), 
                                         total=len(data_loader), 
                                         desc=f'Epoch {epoch+1}/{num_epochs}'):
             images, masks = images.cuda(), masks.cuda()
+            outputs = model(images)
+            if isinstance(outputs, dict) and 'out' in outputs:
+                outputs = outputs['out']
+            
+            # Loss 계산
+            loss = criterion(outputs, masks)
+            epoch_loss += loss.item()
 
-            # Train loss
-            with torch.cuda.amp.autocast(enabled=mixed_precision):
-                outputs = model(images)
-                if isinstance(outputs, dict) and 'out' in outputs:
-                    outputs = outputs['out']
-                loss = criterion(outputs, masks)
-                epoch_loss += loss.item()
-
+            # IoU Loss 계산
+            outputs = torch.sigmoid(outputs)
+            outputs = (outputs > 0.5).float() # threshold 적용
+            iou_loss_value = (1.0 - iou(masks, outputs)).mean()
+            epoch_iou_loss += iou_loss_value.item()
+            
             # Backpropagation
-            if mixed_precision:   
-                scaler.scale(loss).backward()               
+            if mixed_precision:
+                scaler.scale(loss).backward()
             else:
                 loss.backward()
-            
+
             # Gradient Accumulation
-            if (step + 1) % accumulation_steps == 0 or (step + 1) == len(data_loader):
+            if(step + 1) % accumulation_steps == 0  or (step + 1) == len(data_loader):
                 if mixed_precision:
                     scaler.step(optimizer)
                     scaler.update()
                 else:
                     optimizer.step()
                 optimizer.zero_grad()
-
-        # 에폭당 평균 train loss 계산
-        avg_train_loss = epoch_loss / len(data_loader)
-        print(f"Epoch[{epoch+1}/{num_epochs}] Completed. Avg Loss: {avg_train_loss:.4f}")
         
+        # 에폭당 평균 train loss / train iou loss 계산
+        avg_train_loss = epoch_loss / len(data_loader)
+        avg_train_iou_loss = epoch_iou_loss / len(data_loader)
+
+        # 로그 출력
+        print(f"Epoch [{epoch+1}/{num_epochs}] - Avg Train Loss: {avg_train_loss:.4f}, Avg IoU Loss: {avg_train_iou_loss:.4f}")
+            
         # Validation 단계
         if (epoch + 1) % interver == 0:
-            dice = validation(epoch + 1, model, val_loader, criterion, classes)
+            # utils.validation에서 구현된 validation 함수 사용
+            dice, IoU = validation(epoch + 1, model, val_loader, criterion, classes)
             
             # WandB에 메트릭 로깅
             wandb.log({
                 "epoch": epoch + 1,
                 "learning_rate": optimizer.param_groups[0]['lr'],
                 "train_loss": avg_train_loss,
-                "dice_coefficient": dice
+                "train_iou_loss": avg_train_iou_loss,
+                "dice_coefficient": dice,
+                "iou": IoU
             })
             
             # Save CheckPoints
             if best_dice < dice:
                 print(f"Best performance at epoch: {epoch + 1}, {best_dice:.4f} -> {dice:.4f}")
                 best_dice = dice
-                
+                best_iou = IoU
+
                 # model unhooking
                 wandb.unwatch(model)
-                save_model(model, save_dir, save_name)
+                save_model(model, save_dir, model_name)
                 
-                # Best 모델을 WandB에 저장
+                # Best 모델을 WandB에 저장 -> Test 모델 형태랑 충돌
                 artifact = wandb.Artifact(
                     name=f"{save_name}_best", 
                     type="model",
-                    description=f"Best model with dice score: {dice:.4f}"
+                    description=f"Best model with dice score: {dice:.4f}, iou score: {IoU:.4f}"
                 )
-                artifact.add_file(f"{save_dir}/{save_name}_best_model.pt")
+                artifact.add_file(f"{save_dir}/{model_name}_best_model.pt")
                 wandb.log_artifact(artifact)
+
+    print(f"Training completed. Best Dice Score: {best_dice:.4f}, Best IoU Score: {best_iou:.4f}")
 
 def main():
     # WandB 로그인
@@ -141,8 +159,10 @@ def main():
     batch_size = config['BATCH_SIZE']
     n_class = len(classes)
     model_name = config['model']['model_name']
-    save_name = f'{model_name}_{config["LR"]}_{batch_size}'+time.strftime("%Y%m%d_%H%M%S") if not config['lr_scheduler'] else f'{model_name}_{config["lr_scheduler"]}_{batch_size}'+time.strftime("%Y%m%d_%H%M%S")
-    save_group = model_name
+    save_name = f'{model_name}_{config["LR"]}_{batch_size}_'+time.strftime("%Y%m%d_%H%M%S")
+        # if not 'lr_scheduler' in config else \
+        #     f'{model_name}_{config["lr_scheduler"]['type']}_{batch_size}_'+time.strftime("%Y%m%d_%H%M%S")
+    save_group = model_name # model name, augmentation, scheduler
 
     train_dataset = XRayDataset(
         is_train=True,
@@ -165,6 +185,7 @@ def main():
         num_workers=8,
         drop_last=True,
     )
+    # 주의: validation data는 이미지 크기가 크기 때문에 `num_workers`는 커지면 메모리 에러가 발생할 수 있습니다.
     valid_loader = DataLoader(
         dataset=valid_dataset, 
         batch_size=4,
@@ -189,15 +210,23 @@ def main():
     
     # Loss function을 정의합니다.
     criterion = nn.BCEWithLogitsLoss()
+    # loss_selector = LossSelector(config['loss'])
+    # criterion = loss_selector.get_loss()
 
     # Optimizer를 정의합니다.
     optimizer = optim.Adam(params=model.parameters(), lr=config['LR'], weight_decay=1e-6)
-    
-    # mixed_precision 설정
-    mixed_precision = config.get('mixed_precision', True)
+
+    # mixed precision 설정
+    if 'mixed_precision' in config:
+        mixed_precision = config['mixed_precision']
+    else:
+        mixed_precision = True
 
     # Gradient Accumulation_steps 설정
-    accumulation_steps = config.get('accumulation_steps', 1)
+    if 'accumulation_steps' in config:
+        accumulation_steps = config['accumulation_steps']
+    else:
+        accumulation_steps = 1
 
     # wandb에 기록할 config 설정
     wandb_config = {
@@ -205,11 +234,14 @@ def main():
         "batch_size": batch_size,
         "optimizer": "Adam",
         "weight_decay": 1e-6,
-        "model": config['save']['name'],
+        "model": model_name,
         "epochs": config['NUM_EPOCHS'],
         "image_size": 512,
         "validation_interval": config['VAL_INTERVER']
     }
+
+    # import logging
+    # logging.warning(f"Num_epochs {config['NUM_EPOCHS']}")
 
     train(
         model,
@@ -217,6 +249,7 @@ def main():
         valid_loader,
         criterion,
         optimizer,
+        scheduler,
         num_epochs=config['NUM_EPOCHS'],
         interver=config['VAL_INTERVER'],
         save_dir=config['SAVED_DIR'],
