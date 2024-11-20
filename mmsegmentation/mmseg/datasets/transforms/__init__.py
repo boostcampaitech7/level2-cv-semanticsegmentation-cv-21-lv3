@@ -15,8 +15,6 @@ from .transforms import (CLAHE, AdjustGamma, Albu, BioMedical3DPad,
                          ResizeShortestEdge, ResizeToMultiple, RGB2Gray,
                          SegRescale)
 
-from .xray_bone import LoadXRayBoneAnnotation, TransposeAnnotation
-
 # yapf: enable
 __all__ = [
     'LoadAnnotations', 'RandomCrop', 'BioMedical3DRandomCrop', 'SegRescale',

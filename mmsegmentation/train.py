@@ -3,6 +3,7 @@ import argparse
 import logging
 import os
 import os.path as osp
+import wandb
 
 from mmengine.config import Config, DictAction
 from mmengine.logging import print_log
@@ -13,8 +14,9 @@ from mmseg.registry import RUNNERS
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a segmentor')
-    parser.add_argument('config', help='train config folder path')
+    parser.add_argument('config', help='train config file path')
     parser.add_argument('--work-dir', help='the dir to save logs and models')
+    parser.add_argument('--exp-name', help='experiment name')
     parser.add_argument(
         '--resume',
         action='store_true',
@@ -23,7 +25,7 @@ def parse_args():
     parser.add_argument(
         '--amp',
         action='store_true',
-        default=False,
+        default=True,
         help='enable automatic-mixed-precision training')
     parser.add_argument(
         '--cfg-options',
@@ -53,15 +55,13 @@ def parse_args():
 
 def main():
     args = parse_args()
-
-    config_file = f"{args.config}/config.py"
-    args.work_dir = f"{args.config}/checkpoints"
-
-    if not os.path.isdir(args.work_dir):
-        os.makedirs(args.work_dir, exist_ok=True)
+    
+    wandb.init(entity='ppp6131-yonsei-university',
+                project='Semantic_segmentation',
+                name=args.exp_name)
 
     # load config
-    cfg = Config.fromfile(config_file)
+    cfg = Config.fromfile(args.config)
     cfg.launcher = args.launcher
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)
@@ -93,17 +93,6 @@ def main():
     # resume training
     cfg.resume = args.resume
 
-    # wandb 설정
-    exp_name = args.config
-    if args.resume:
-        exp_name = exp_name + "_Resume"
-    init_kwargs = dict(
-        name=exp_name, project="Semantic_segmentation", entity="ppp6131-yonsei-university"
-    )
-    cfg.wandb_kwargs = dict(init_kwargs=init_kwargs)
-    cfg.vis_backends = [dict(type="LocalVisBackend"), dict(type="WandbVisBackend", **cfg.wandb_kwargs)]
-    cfg.visualizer = dict(type="SegLocalVisualizer", vis_backends=cfg.vis_backends, name="visualizer")
-
     # build the runner from config
     if 'runner_type' not in cfg:
         # build the default runner
@@ -112,7 +101,6 @@ def main():
         # build customized runner from the registry
         # if 'runner_type' is set in the cfg
         runner = RUNNERS.build(cfg)
-
     # start training
     runner.train()
 
