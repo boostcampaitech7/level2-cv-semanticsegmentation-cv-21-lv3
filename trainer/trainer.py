@@ -13,7 +13,7 @@ class Trainer:
     """
     Trainer Class
     """
-    def __init__(self, model, train_loader, val_loader, optimizer, criterion, config):
+    def __init__(self, model, train_loader, val_loader, optimizer, criterion, config, sweep_mode):
         """
         Initialize the Trainer class.
         """
@@ -24,37 +24,25 @@ class Trainer:
         self.optimizer = optimizer
         self.config = config
         self.scaler = torch.cuda.amp.GradScaler()
+        self.sweep_mode = sweep_mode
+        
+        # 하이퍼파라미터 초기화
         self.num_epochs = config['NUM_EPOCHS']
         self.interver = config['VAL_INTERVER']
-        self.best_dice = 0.
-        self.best_iou = 0.
+        self.best_dice = 0.0
+        self.best_iou = 0.0
         self.model_name = config['model']['model_name']
         self.save_dir = config['SAVED_DIR']
         self.classes = config['CLASSES']
+        self.lr = self.config["LR"]
+        self.batch_size = self.config["BATCH_SIZE"]
 
-        # 저장될 모델 이름 설정
-        self.save_name = f'{self.model_name}_{self.config["LR"]}_{self.config["BATCH_SIZE"]}_'+time.strftime("%Y%m%d_%H%M%S") \
-        if not 'lr_scheduler' in self.config else \
-        f'{self.model_name}_{self.config["lr_scheduler"]["type"]}_{self.config["BATCH_SIZE"]}_'+time.strftime("%Y%m%d_%H%M%S")
-
-        # mixed precision 설정
-        if 'mixed_precision' in config:
-            self.mixed_precision = config['mixed_precision']
-        else:
-            self.mixed_precision = True
-
-        # Gradient Accumulation_steps 설정
-        if 'accumulation_steps' in config:
-            self.accumulation_steps = config['accumulation_steps']
-        else:
-            self.accumulation_steps = 1
+        # mixed precision 및 Gradient Accumulation_steps 설정
+        self.mixed_precision = config.get('mixed_precision', True)
+        self.accumulation_steps = config.get('accumulation_steps', 1)
 
         # Scheduler 설정
-        if 'lr_scheduler' in config:
-            scheduler_selector = LRSchedulerSelector(optimizer, config['lr_scheduler'])
-            self.scheduler = scheduler_selector.get_scheduler()
-        else:
-            self.scheduler = None
+        self.scheduler = LRSchedulerSelector(optimizer, config.get('lr_scheduler')).get_scheduler() if 'lr_scheduler' in config else None
 
     def _train_epoch(self, epoch):
         """
@@ -74,18 +62,15 @@ class Trainer:
                                         desc=f'Epoch {epoch+1}/{self.num_epochs}'):
             images, masks = images.cuda(), masks.cuda()
             outputs = self.model(images)
-            if isinstance(outputs, dict) and 'out' in outputs:
-                outputs = outputs['out']
+            outputs = outputs['out'] if isinstance(outputs, dict) and 'out' in outputs else outputs
             
             # Loss 계산
             loss = self.criterion(outputs, masks)
             epoch_loss += loss.item()
 
             # IoU Loss 계산
-            outputs = torch.sigmoid(outputs)
-            outputs = (outputs > 0.5).float() # threshold 적용
-            iou_loss_value = (1.0 - iou(masks, outputs)).mean()
-            epoch_iou_loss += iou_loss_value.item()
+            outputs = (torch.sigmoid(outputs) > 0.5).float()  # threshold 적용
+            epoch_iou_loss += (1.0 - iou(masks, outputs)).mean().item()
             
             self._backpropagate(loss, step)
         
@@ -94,7 +79,13 @@ class Trainer:
         avg_iou_loss = epoch_iou_loss / len(self.train_loader)
 
         # 로그 출력
-        print(f"Epoch [{epoch+1}/{epoch}] - Avg Train Loss: {avg_loss:.4f}, Avg IoU Loss: {avg_iou_loss:.4f}")
+        wandb.log({
+            "epoch": epoch + 1,
+            "avg_train_loss": avg_loss,
+            "avg_iou_loss": avg_iou_loss,
+            "learning_rate": self.optimizer.param_groups[0]['lr']
+        })
+        print(f"Epoch [{epoch+1}/{self.num_epochs}] - Avg Train Loss: {avg_loss:.4f}, Avg IoU Loss: {avg_iou_loss:.4f}")
             
         return avg_loss, avg_iou_loss
 
@@ -105,10 +96,7 @@ class Trainer:
         :param loss: The calculated loss value
         :param step: The current step number
         """
-        if self.mixed_precision:
-            self.scaler.scale(loss).backward()
-        else:
-            loss.backward()
+        self.scaler.scale(loss).backward() if self.mixed_precision else loss.backward()
 
         if (step + 1) % self.accumulation_steps == 0 or (step + 1) == len(self.train_loader):
             self._optimizer_step()
@@ -132,15 +120,12 @@ class Trainer:
         :param avg_train_loss: The average training loss
         :param avg_train_iou_loss: The average IoU loss
         """
-        # utils.validation에서 구현된 validation 함수 사용
         dice, IoU = validation(epoch + 1, self.model, self.val_loader, self.criterion, self.classes)
         
         # WandB에 메트릭 로깅
+        # WandB에 메트릭 로깅
         wandb.log({
             "epoch": epoch + 1,
-            "learning_rate": self.optimizer.param_groups[0]['lr'],
-            "train_loss": avg_train_loss,
-            "train_iou_loss": avg_train_iou_loss,
             "dice_coefficient": dice,
             "iou": IoU
         })
@@ -171,10 +156,8 @@ class Trainer:
         :param dice: The Dice score of the current epoch
         :param IoU: The IoU score of the current epoch
         """
-        
-        # 저장 디렉토리 생성
-        os.makedirs(self.save_dir, exist_ok=True)
-        
+        os.makedirs(self.save_dir, exist_ok=True)       
+
         # 모델 저장
         wandb.unwatch(self.model)
         output_path = os.path.join(self.save_dir, f'{self.save_name}.pt')
@@ -182,21 +165,36 @@ class Trainer:
         print(f"Model saved to {output_path}")
 
         # WandB에 메트릭 로깅
-        artifact = wandb.Artifact(
-            name=self.save_name, 
-            type="model",
-            description=f"Best model with dice score: {dice:.4f}, iou score: {IoU:.4f}"
-        )
-        artifact.add_file(output_path)
-        wandb.log_artifact(artifact)
+        # artifact = wandb.Artifact(
+        #     name=self.save_name, 
+        #     type="model",
+        #     description=f"Best model with dice score: {dice:.4f}, iou score: {IoU:.4f}"
+        # )
+        # artifact.add_file(output_path)
+        # wandb.log_artifact(artifact)
 
     def train(self):
         """
         Perform the entire training process.
+        
+        :param sweep_mode: Boolean indicating if sweep mode is active.
         """
 
         # 시드 고정
         set_seed(42)
+
+        # sweep 하이퍼파라미터 설정
+        if self.sweep_mode:
+            self.num_epochs = wandb.config.num_epochs
+            self.batch_size = wandb.config.batch_size
+            self.optimizer.param_groups[0]['lr'] = wandb.config.learning_rate
+            print(f"lr:{self.optimizer.param_groups[0]['lr']}, batch_size:{self.batch_size}")
+
+        # 저장될 모델 이름 설정
+        self.lr_scheduler_type = self.config.get("lr_scheduler", {}).get("type", "default") 
+        self.save_name = f'{self.model_name}_{self.lr}_{self.batch_size}_{time.strftime("%Y%m%d_%H%M%S")}' \
+                         if not 'lr_scheduler' in self.config else \
+                         f'{self.model_name}_{self.lr_scheduler_type}_{self.batch_size}_{time.strftime("%Y%m%d_%H%M%S")}'   
 
         # WandB 초기화
         wandb.init(
@@ -209,9 +207,10 @@ class Trainer:
 
         # 학습 수행
         for epoch in range(self.num_epochs):
-            # 모델 구조 로깅
             wandb.watch(self.model, self.criterion, log="all", log_freq=100)
             avg_train_loss, avg_train_iou_loss = self._train_epoch(epoch)
             if (epoch + 1) % self.interver == 0:
                 self.valid(epoch, avg_train_loss, avg_train_iou_loss)
+            if self.scheduler != None:
+                self.scheduler.step()
         print(f"Training completed. Best Dice Score: {self.best_dice:.4f}, Best IoU Score: {self.best_iou:.4f}")

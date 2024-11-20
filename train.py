@@ -1,5 +1,3 @@
-
-
 import wandb
 from tqdm import tqdm
 import albumentations as A
@@ -55,9 +53,10 @@ def main():
         batch_size=4,
         shuffle=False,
         num_workers=8,
+        pin_memory=True,
         drop_last=False
     )
-
+    
     # model
     model_selector = ModelSelector(
         config=config['model'],
@@ -73,19 +72,29 @@ def main():
 
     # Optimizer
     optimizer = optim.Adam(params=model.parameters(), lr=config['LR'], weight_decay=1e-6)
-
+    
     # Trainer 클래스 인스턴스 생성
+    sweep_mode = config.get('sweep_config', {}).get('sweep_mode', False)  # sweep_mode 값 가져오기
+    print(sweep_mode)
     trainer = Trainer(
         model=model,
         train_loader=train_loader,
         val_loader=valid_loader,
         optimizer=optimizer,
         criterion=criterion,
-        config=config
+        config=config,
+        sweep_mode=sweep_mode  # sweep_mode 전달
     )
 
-    # 학습 시작
-    trainer.train()
+    # run sweep
+    if sweep_mode:
+        sweep_id = wandb.sweep(config['sweep_config'],
+                               project="boostcamp7th_semantic_segmentation", 
+                               entity="ppp6131-yonsei-university")
+        wandb.agent(sweep_id, function=trainer.train, count=1)  # 각 모델에 대해 한 번씩 실행
+    else:
+        # 학습 시작
+        trainer.train()
 
 if __name__ == '__main__':
     main()
