@@ -2,6 +2,8 @@ import torch.nn as nn
 import torchvision.models.segmentation as models 
 import segmentation_models_pytorch as smp
 
+from models.attn_unet import AttU_Net
+
 class TorchvisionModel(nn.Module):
     """
     Torchvision에서 제공하는 사전 훈련된 모델을 사용하는 클래스.
@@ -64,8 +66,8 @@ class ModelSelector:
     ):
         
         # 모델 유형에 따라 적절한 모델 객체를 생성
-        if 'simple' in config['type'] :
-            self.model = None  # 기본 단순 모델이 정의되지 않았음.
+        if 'attn_unet' in config['type'] :
+            self.model = AttU_Net(img_ch=3, output_ch=num_classes)
         
         elif 'torchvision' in config['type']:
             self.model = TorchvisionModel(
