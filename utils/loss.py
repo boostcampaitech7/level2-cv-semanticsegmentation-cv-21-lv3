@@ -1,11 +1,23 @@
 import torch
 import torch.nn as nn
-from monai.losses import DiceLoss, SoftclDiceLoss, SoftDiceclDiceLoss
-from monai.losses import GeneralizedDiceLoss, GeneralizedWassersteinDiceLoss
+from segmentation_models_pytorch.losses import *
+
+class BCEWithDICE(nn.Module):
+    def __init__(self, dice_weight=0.5, bce_weight=0.5):
+        super().__init__()
+        self.dice_weight = dice_weight
+        self.bce_weight = bce_weight
+        self.dice = DiceLoss(mode="multilabel")
+        self.bce = nn.BCEWithLogitsLoss()
+
+    def forward(self, inputs, targets):
+        bce_loss = self.bce(inputs, targets)  # Corrected reference
+        dice_loss = self.dice(inputs, targets)  # Corrected reference
+        return self.bce_weight * bce_loss + self.dice_weight * dice_loss
 
 class LossSelector:
     def __init__(self, loss_config):
-        """
+        """s
         Initialize LossSelector with configuration.
         :param loss_config: dict containing loss type and its parameters.
         """
@@ -22,22 +34,10 @@ class LossSelector:
             return self._get_bcewithlogitsloss()
         elif self.loss_type == 'diceloss':
             return self._get_dice_loss()
-        elif self.loss_type == 'generalizeddiceloss':
-            return self._get_generalized_dice_loss()
-        elif self.loss_type == 'softcldiceloss':
-            return self._get_softcl_dice_loss()
-        elif self.loss_type == 'softdicecldiceloss':
-            return self._get_soft_dicecl_dice_loss()
+        elif self.loss_type == 'bcewithdice':
+            return self._get_bcewithdice_loss()
         else:
             raise ValueError(f"지원하지 않는 손실함수 타입입니다: {self.loss_type}")
-
-    def _filter_loss_params(self, required_params):
-        """
-        필수 파라미터만 남기고 나머지는 제거하는 함수
-        :param required_params: 해당 손실 함수에 필요한 파라미터 목록
-        :return: 필터링된 파라미터 딕셔너리
-        """
-        return {key: value for key, value in self.loss_params.items() if key in required_params}
 
     def _get_bcewithlogitsloss(self):
         """
@@ -51,33 +51,12 @@ class LossSelector:
         DiceLoss: 1 - dice coefficient
         """
         # DiceLoss에 필요한 파라미터들만 필터링
-        required_params = ['include_background', 'softmax', 'other_act', 'reduction']
-        filtered_params = self._filter_loss_params(required_params)
-        return DiceLoss(**filtered_params)
-    
-    def _get_generalized_dice_loss(self):
-        """
-        GeneralizedDiceLoss
-        """
-        # GeneralizedDiceLoss에 필요한 파라미터들만 필터링
-        required_params = ['include_background', 'softmax', 'other_act', 'w_type', 'reduction']
-        filtered_params = self._filter_loss_params(required_params)
-        return GeneralizedDiceLoss(**filtered_params)
-    
-    def _get_softcl_dice_loss(self):
-        """
-        SoftclDiceLoss: 필요한 파라미터는 iter, smooth, alpha 만
-        """
-        # SoftclDiceLoss에 필요한 파라미터들만 필터링
-        required_params = ['iter', 'smooth']
-        filtered_params = self._filter_loss_params(required_params)
-        return SoftclDiceLoss(**filtered_params)
+        return DiceLoss(mode="multilabel")
 
-    def _get_soft_dicecl_dice_loss(self):
+    def _get_bcewithdice_loss(self):
         """
-        SoftDiceclDiceLoss: 필요한 파라미터는 iter, smooth, alpha 만
+        Combined BCEWithLogitsLoss and DiceLoss
         """
-        # SoftDiceclDiceLoss에 필요한 파라미터들만 필터링
-        required_params = ['iter', 'smooth', 'alpha']
-        filtered_params = self._filter_loss_params(required_params)
-        return SoftDiceclDiceLoss(**filtered_params)
+        d_w = self.loss_params.get('dice_weight', 0.5)
+        b_w = self.loss_params.get('bce_weight', 0.5)
+        return BCEWithDICE(dice_weight=d_w, bce_weight=b_w)
