@@ -1,7 +1,11 @@
+import argparse
+
 import wandb
 from tqdm import tqdm
 import albumentations as A
+from segmentation_models_pytorch.losses import DiceLoss
 
+import torch
 from torch.utils.data import DataLoader
 import torch.optim as optim
 import torch.nn as nn
@@ -11,15 +15,20 @@ from utils.util import load_config
 from utils.dataset import XRayDataset
 from utils.scheduler import LRSchedulerSelector
 from utils.loss import LossSelector
-from trainer.trainer import Trainer  # Trainer 클래스 임포트
+from utils.transforms import get_transforms
+from trainer.trainer import Trainer
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_path', type=str, required=False, help='Path to the model file')
+    args = parser.parse_args()
+    model_path = args.model_path   
     # WandB 로그인
     wandb.login()
     
-    tf = A.Resize(512, 512)
-    
-    config = load_config('./config/config.json')  # config.json 로드
+    train_tf = get_transforms(is_train=True)
+    valid_tf = get_transforms(is_train=False)
+
     data_root = config['DATA_ROOT']
     img_root = f"{data_root}/train/DCM"
     label_root = f"{data_root}/train/outputs_json"
@@ -28,14 +37,14 @@ def main():
    
     train_dataset = XRayDataset(
         is_train=True,
-        transforms=tf,
+        transforms=train_tf,
         img_root=img_root,
         label_root=label_root,
         classes=classes
     )
     valid_dataset = XRayDataset(
         is_train=False,
-        transforms=tf,
+        transforms=valid_tf,
         img_root=img_root,
         label_root=label_root,
         classes=classes
@@ -56,26 +65,27 @@ def main():
         pin_memory=True,
         drop_last=False
     )
-    
-    # model
-    model_selector = ModelSelector(
-        config=config['model'],
-        num_classes=len(classes)
-    )
-    model = model_selector.get_model()
+
+    if model_path is None:
+        # model
+        model_selector = ModelSelector(
+            config=config['model'],
+            num_classes=len(classes)
+        )
+        model = model_selector.get_model()
+    else: # fine tuning
+        model = torch.load(model_path)
     model = model.cuda()
     
     # Loss function
-    criterion = nn.BCEWithLogitsLoss()
-    # loss_selector = LossSelector(config['loss'])
-    # criterion = loss_selector.get_loss()
+    #criterion = DiceLoss(mode="multilabel")
+    loss_selector = LossSelector(config['loss'])
+    criterion = loss_selector.get_loss()
 
     # Optimizer
-    optimizer = optim.Adam(params=model.parameters(), lr=config['LR'], weight_decay=1e-6)
+    optimizer = optim.AdamW(params=model.parameters(), lr=config['LR'], weight_decay=1e-6)
     
     # Trainer 클래스 인스턴스 생성
-    sweep_mode = config.get('sweep_config', {}).get('sweep_mode', False)  # sweep_mode 값 가져오기
-    print(sweep_mode)
     trainer = Trainer(
         model=model,
         train_loader=train_loader,
@@ -85,16 +95,24 @@ def main():
         config=config,
         sweep_mode=sweep_mode  # sweep_mode 전달
     )
+    
+    trainer.train()
+
+if __name__ == '__main__':
+    
+    # config.json 로드
+    config = load_config('./config/config.json')  
+    sweep_mode = config.get('sweep_config', {}).get('sweep_mode', False)  # sweep_mode 값 가져오기
+    print(f'Sweep_mode: {sweep_mode}')
 
     # run sweep
     if sweep_mode:
         sweep_id = wandb.sweep(config['sweep_config'],
                                project="boostcamp7th_semantic_segmentation", 
                                entity="ppp6131-yonsei-university")
-        wandb.agent(sweep_id, function=trainer.train, count=1)  # 각 모델에 대해 한 번씩 실행
+        wandb.agent(sweep_id, function=lambda:main())  # 각 모델에 대해 한 번씩 실행
     else:
         # 학습 시작
-        trainer.train()
+        main()
 
-if __name__ == '__main__':
-    main()
+    
