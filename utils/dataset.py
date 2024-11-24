@@ -128,7 +128,6 @@ class XRayDataset(Dataset):
         image_path = os.path.join(self.img_root, image_name)
         
         image = cv2.imread(image_path)
-        image = image / 255.
         
         label_name = self.labelnames[item]
         label_path = os.path.join(self.label_root, label_name)
@@ -154,17 +153,10 @@ class XRayDataset(Dataset):
             label[..., class_ind] = class_label
         
         if self.transforms is not None:
-            inputs = {"image": image, "mask": label} if self.is_train else {"image": image}
+            inputs = {"image": image, "mask": label}
             result = self.transforms(**inputs)
             
             image = result["image"]
-            label = result["mask"] if self.is_train else label
-
-        # to tenser will be done later
-        image = image.transpose(2, 0, 1)    # channel first 포맷으로 변경합니다.
-        label = label.transpose(2, 0, 1)
-        
-        image = torch.from_numpy(image).float()
-        label = torch.from_numpy(label).float()
+            label = result["mask"]
             
         return image, label
