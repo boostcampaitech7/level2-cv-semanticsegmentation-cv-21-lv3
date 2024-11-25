@@ -36,6 +36,8 @@ class LossSelector:
             return self._get_dice_loss()
         elif self.loss_type == 'bcewithdice':
             return self._get_bcewithdice_loss()
+        elif self.loss_type == 'swinbcewithdice':  # config와 일치하도록 수정
+            return self._get_swinbcewithdice_loss()
         else:
             raise ValueError(f"지원하지 않는 손실함수 타입입니다: {self.loss_type}")
 
@@ -60,3 +62,55 @@ class LossSelector:
         d_w = self.loss_params.get('dice_weight', 0.5)
         b_w = self.loss_params.get('bce_weight', 0.5)
         return BCEWithDICE(dice_weight=d_w, bce_weight=b_w)
+    
+    def _get_swinbcewithdice_loss(self):
+       """
+       SwinV2-L optimized BCEWithDICE loss
+       """
+       d_w = self.loss_params.get('dice_weight', 0.5)
+       b_w = self.loss_params.get('bce_weight', 0.5)
+       smooth = self.loss_params.get('smooth', 1e-5)
+       return SwinBCEWithDICE(
+           dice_weight=d_w, 
+           bce_weight=b_w,
+           smooth=smooth
+       )
+    
+    
+class SwinBCEWithDICE(nn.Module):
+    def __init__(self, dice_weight=0.5, bce_weight=0.5, smooth=1e-5):
+        super().__init__()
+        self.dice_weight = dice_weight
+        self.bce_weight = bce_weight
+        self.smooth = smooth
+        
+        # DiceLoss with improved numerical stability
+        self.dice = DiceLoss(
+            mode="multilabel",
+            smooth=self.smooth,
+            log_loss=False,  # log_loss=True를 사용하면 수치 안정성이 향상되지만 학습이 느려질 수 있음
+        )
+        
+        # BCEWithLogitsLoss with improved numerical stability
+        self.bce = nn.BCEWithLogitsLoss(
+            reduction='mean',
+            pos_weight=None  # 클래스 불균형이 심한 경우 pos_weight 설정 고려
+        )
+
+    def forward(self, inputs, targets):
+        # Ensure float32 precision
+        inputs = inputs.float()
+        targets = targets.float()
+        
+        # memory efficient forward pass
+        with torch.cuda.amp.autocast(enabled=True):  # mixed precision 지원
+            bce_loss = self.bce(inputs, targets)
+            dice_loss = self.dice(inputs, targets)
+            
+            # weighted sum
+            loss = self.bce_weight * bce_loss + self.dice_weight * dice_loss
+            
+        return loss
+
+    def __repr__(self):
+        return f"BCEWithDICE(dice_weight={self.dice_weight}, bce_weight={self.bce_weight}, smooth={self.smooth})"

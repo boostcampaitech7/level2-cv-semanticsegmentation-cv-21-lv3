@@ -160,3 +160,157 @@ class XRayDataset(Dataset):
             label = result["mask"]
             
         return image, label
+    
+class SwinXRayDataset(Dataset):
+    def __init__(
+            self,
+            is_train=True,
+            transforms=None,
+            img_root=None,
+            label_root=None,
+            classes=[],
+            config=None  # Swin config 추가
+        ):
+        self.classes = classes
+        self.CLASS2IND = {v: i for i, v in enumerate(classes)}
+        self.is_train = is_train
+        self.transforms = transforms
+        self.img_root = img_root
+        self.label_root = label_root
+        
+        # Swin config에서 필요한 설정 가져오기
+        self.img_size = config.get('img_size', 224)  # Swin default
+        
+        _filenames, _labelnames = self.load_filenames()       
+        self.filenames, self.labelnames= self.split_filenames(_filenames,_labelnames)
+    
+    def split_filenames(self, _filenames, _labelnames, n=5):
+        groups = [os.path.dirname(fname) for fname in _filenames]
+        ys = [0 for fname in _filenames]
+        
+        gkf = GroupKFold(n_splits=n)
+        
+        filenames = []
+        labelnames = []
+        for i, (x, y) in enumerate(gkf.split(_filenames, ys, groups)):
+            if self.is_train:
+                if i == 0:
+                    continue
+                filenames += list(_filenames[y])
+                labelnames += list(_labelnames[y])
+            else:
+                filenames = list(_filenames[y])
+                labelnames = list(_labelnames[y])
+                                
+        return filenames, labelnames
+    
+    def load_filenames(self):
+        pngs = {
+                os.path.relpath(os.path.join(root, fname), start=self.img_root)
+                for root, _dirs, files in os.walk(self.img_root)
+                for fname in files
+                if os.path.splitext(fname)[1].lower() == ".png"
+        }
+        jsons = {
+            os.path.relpath(os.path.join(root, fname), start=self.label_root)
+            for root, _dirs, files in os.walk(self.label_root)
+            for fname in files
+            if os.path.splitext(fname)[1].lower() == ".json"
+        }
+        
+        jsons_fn_prefix = {os.path.splitext(fname)[0] for fname in jsons}
+        pngs_fn_prefix = {os.path.splitext(fname)[0] for fname in pngs}
+
+        assert len(jsons_fn_prefix - pngs_fn_prefix) == 0
+        assert len(pngs_fn_prefix - jsons_fn_prefix) == 0
+
+        pngs = sorted(pngs)
+        jsons = sorted(jsons)
+        return np.array(pngs), np.array(jsons)
+
+    def __len__(self):
+        return len(self.filenames)
+    
+    def __getitem__(self, item):
+        image_name = self.filenames[item]
+        image_path = os.path.join(self.img_root, image_name)
+        
+        image = cv2.imread(image_path)
+        # Swin 입력 크기에 맞게 조정
+        image = cv2.resize(image, (self.img_size, self.img_size))
+        
+        label_name = self.labelnames[item]
+        label_path = os.path.join(self.label_root, label_name)
+        
+        label_shape = (self.img_size, self.img_size, len(self.classes))
+        label = np.zeros(label_shape, dtype=np.uint8)
+        
+        with open(label_path, "r") as f:
+            annotations = json.load(f)
+        annotations = annotations["annotations"]
+        
+        for ann in annotations:
+            c = ann["label"]
+            class_ind = self.CLASS2IND[c]
+            points = np.array(ann["points"])
+            
+            # 포인트 좌표를 새로운 이미지 크기에 맞게 조정
+            points = points * (self.img_size / image.shape[0])
+            points = points.astype(np.int32)
+            
+            class_label = np.zeros((self.img_size, self.img_size), dtype=np.uint8)
+            cv2.fillPoly(class_label, [points], 1)
+            label[..., class_ind] = class_label
+        
+        image = image / 255.
+        
+        if self.transforms is not None:
+            inputs = {"image": image, "mask": label}
+            result = self.transforms(**inputs)
+            image = result["image"]
+            label = result["mask"]
+        
+        return image, label
+
+class SwinXRayInferenceDataset(Dataset):
+    def __init__(self, 
+                 transforms=None,
+                 img_root=None,
+                 classes=[],
+                 config=None  # Swin config 추가
+                 ):
+        self.classes = classes
+        self.img_root = img_root
+        self.transforms = transforms
+        self.img_size = config.get('img_size', 224)  # Swin default
+        self.filenames = self.load_filenames()
+        
+    def load_filenames(self):
+        pngs = {
+            os.path.relpath(os.path.join(root, fname), start=self.img_root)
+            for root, _dirs, files in os.walk(self.img_root)
+            for fname in files
+            if os.path.splitext(fname)[1].lower() == ".png"
+        }
+        return np.array(sorted(pngs))
+
+    def __len__(self):
+        return len(self.filenames)
+    
+    def __getitem__(self, item):
+        image_name = self.filenames[item]
+        image_path = os.path.join(self.img_root, image_name)
+        
+        image = cv2.imread(image_path)
+        image = cv2.resize(image, (self.img_size, self.img_size))
+        image = image / 255.
+        
+        if self.transforms is not None:
+            inputs = {"image": image}
+            result = self.transforms(**inputs)
+            image = result["image"]
+
+        image = image.transpose(2, 0, 1)  
+        image = torch.from_numpy(image).float()
+            
+        return image, image_name

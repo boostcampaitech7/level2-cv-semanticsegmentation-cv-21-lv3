@@ -1,57 +1,67 @@
 {   
-    "DATA_ROOT": "./data",
-    "SAVED_DIR": "./checkpoints",
-    "CLASSES": [
-        "finger-1", "finger-2", "finger-3", "finger-4", "finger-5",
-        "finger-6", "finger-7", "finger-8", "finger-9", "finger-10",
-        "finger-11", "finger-12", "finger-13", "finger-14", "finger-15",
-        "finger-16", "finger-17", "finger-18", "finger-19", "Trapezium",
-        "Trapezoid", "Capitate", "Hamate", "Scaphoid", "Lunate",
-        "Triquetrum", "Pisiform", "Radius", "Ulna"
-    ],
-    "NUM_EPOCHS": 150,
-    "BATCH_SIZE": 8,
-    "LR": 0.0001,
-    "VAL_INTERVER": 1,
-    "model": {
-        "type": "smp",
-        "model_name": "Linknet",
-        "encoder_name": "resnet152",
-        "encoder_weights":"imagenet"
+   "DATA_ROOT": "/data/ephemeral/home/data",
+   "SAVED_DIR": "./checkpoints",
+   "CLASSES": [
+       "finger-1", "finger-2", "finger-3", "finger-4", "finger-5",
+       "finger-6", "finger-7", "finger-8", "finger-9", "finger-10",
+       "finger-11", "finger-12", "finger-13", "finger-14", "finger-15",
+       "finger-16", "finger-17", "finger-18", "finger-19", "Trapezium",
+       "Trapezoid", "Capitate", "Hamate", "Scaphoid", "Lunate",
+       "Triquetrum", "Pisiform", "Radius", "Ulna"
+   ],
+   "NUM_EPOCHS": 30,
+   "BATCH_SIZE": 4,
+   "LR": 5e-5,
+   "VAL_INTERVER": 30,
+   "model": {
+       "type": "timm",
+       "model_name": "swinv2_large_window12_192_22k",
+       "pretrained": true,
+       "img_size": 384,
+       "window_size": 12,
+       "drop_path_rate": 0.2,
+       "target_size": [2048, 2048]
     },
-    "loss": {
-        "type": "bcewithlogitsloss",
-        "DiceLoss / GeneralizedDiceLoss_params_annotations": {
-            "include_background": "배경 제외 여부 인자                           (Default = True)",
-            "softmax": "softmax 활성화 함수 사용 여부 인자                        (Default = True)",
-            "other_act": "softmax 외 활성화 함수 사용 여부 인자                   (Default = null)",
-            "w_type": "클래스별 가중치 계산 방식 인자 [square, simple, uniform]    (Default = square)",
-            "reduction": "배치별 Loss 값 계산 방식 인자 [None, mean, sum]         (Default = mean)"
-        },
-        "SoftclDiceLoss / SoftDiceclDiceLoss_params_annotations": {
-            "iter": "skeletonization(= 객체 형태 단순화하여 가장 중요한 구조적 특성만 남기는 과정) 반복 횟수 (Default = 3.0 (임의 지정))",
-            "smooth": "예측된 마스크 또는 경계를 부드럽게 변환                                           (Default = 1e-5)",
-            "alpha": "cldice 가중치 조정 (클래스 불균형 해소) 파라미터                                   (Default = null)"
-        },
-
-        "params": {
-            "include_background": false,
-            "softmax": true,
-            "other_act": null,  
-            "w_type": "Square",
-            "reduction": "mean",
-            
-            "iter": 3,
-            "smooth": 1e-5,
-            "alpha": null
-        }
-    },
-    "lr_scheduler": {
-        "type": "custom_cosine_warmup",
-        "t_0": 20,
-        "t_mult": 2,
-        "eta_max": 0.001,
-        "t_up": 2,
-        "gamma": 0.8
-    }
+    "VAL_BATCH_SIZE": 4,
+    "accumulation_steps": 4,  
+    "mixed_precision": true,  
+    "swin_config": {  
+       "drop_path_rate": 0.2,
+       "patch_norm": true,
+       "use_checkpoint": true,
+       "use_abs_pos_embed": false,
+       "pretrained_window_sizes": [12, 12, 12, 6]
+   },
+   "loss": {
+       "type": "swinbcewithdice",
+       "DiceLoss / GeneralizedDiceLoss_params_annotations": {
+           "include_background": "배경 제외 여부 인자                           (Default = True)",
+           "softmax": "softmax 활성화 함수 사용 여부 인자                        (Default = True)",
+           "other_act": "softmax 외 활성화 함수 사용 여부 인자                   (Default = null)",
+           "w_type": "클래스별 가중치 계산 방식 인자 [square, simple, uniform]    (Default = square)",
+           "reduction": "배치별 Loss 값 계산 방식 인자 [None, mean, sum]         (Default = mean)"
+       },
+       "SoftclDiceLoss / SoftDiceclDiceLoss_params_annotations": {
+           "iter": "skeletonization(= 객체 형태 단순화하여 가장 중요한 구조적 특성만 남기는 과정) 반복 횟수 (Default = 3.0 (임의 지정))",
+           "smooth": "예측된 마스크 또는 경계를 부드럽게 변환                                           (Default = 1e-5)",
+           "alpha": "cldice 가중치 조정 (클래스 불균형 해소) 파라미터                                   (Default = null)"
+       },
+       "params": {
+            "dice_weight": 0.7,
+            "bce_weight": 0.3,
+            "smooth": 1e-5
+       }
+   },
+   "lr_scheduler": {
+       "type": "cosine",
+       "t_initial": 30,
+       "lr_min": 5e-6,
+       "warmup_t": 5,
+       "warmup_lr_init": 5e-7
+   },
+   "optimizer": {
+       "type": "adamw",
+      "weight_decay": 0.1, 
+       "layer_decay": 0.8    
+   }
 }

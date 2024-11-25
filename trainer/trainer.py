@@ -7,7 +7,7 @@ from tqdm import tqdm
 import torch
 
 from utils.scheduler import LRSchedulerSelector
-from utils.util import iou, validation, set_seed
+from utils.util import iou, validation, set_seed, validation_swin
 
 class Trainer:
     """
@@ -164,14 +164,6 @@ class Trainer:
         torch.save(self.model, output_path)
         print(f"Model saved to {output_path}")
 
-        # WandB에 메트릭 로깅
-        # artifact = wandb.Artifact(
-        #     name=self.save_name, 
-        #     type="model",
-        #     description=f"Best model with dice score: {dice:.4f}, iou score: {IoU:.4f}"
-        # )
-        # artifact.add_file(output_path)
-        # wandb.log_artifact(artifact)
 
     def train(self):
         """
@@ -214,3 +206,107 @@ class Trainer:
             if self.scheduler != None:
                 self.scheduler.step()
         print(f"Training completed. Best Dice Score: {self.best_dice:.4f}, Best IoU Score: {self.best_iou:.4f}")
+        
+class SwinTrainer(Trainer):
+    def __init__(self, model, train_loader, val_loader, optimizer, criterion, config, sweep_mode):
+        super().__init__(model, train_loader, val_loader, optimizer, criterion, config, sweep_mode)
+        
+        # 더 큰 accumulation steps
+        self.accumulation_steps = config.get('accumulation_steps', 4)
+        
+        # Mixed Precision 필수
+        self.mixed_precision = True
+        
+        # Gradient clipping 추가
+        self.grad_clip_norm = 5.0
+
+    def _get_default_swin_scheduler(self):
+        """Swin Transformer 기본 scheduler 설정"""
+        from torch.optim.lr_scheduler import CosineAnnealingLR
+        return CosineAnnealingLR(
+            self.optimizer,
+            T_max=self.num_epochs,
+            eta_min=1e-5
+       )
+
+    def _train_epoch(self, epoch):
+        self.model.train()
+        epoch_loss = 0.0
+        epoch_iou_loss = 0.0
+        
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
+        for step, (images, masks) in tqdm(enumerate(self.train_loader), 
+                                        total=len(self.train_loader), 
+                                        desc=f'Epoch {epoch+1}/{self.num_epochs}'):
+            images = images.cuda().float()  # float 타입으로 변환
+            masks = masks.cuda().float()    # float 타입으로 변환
+            
+            outputs = self.model(images)
+            outputs = outputs['out'] if isinstance(outputs, dict) and 'out' in outputs else outputs
+            
+            # Loss 계산
+            loss = self.criterion(outputs, masks)
+            epoch_loss += loss.item()
+
+            # IoU Loss 계산
+            outputs = (torch.sigmoid(outputs) > 0.5).float()  # float 타입으로 변환
+            epoch_iou_loss += (1.0 - iou(masks, outputs)).mean().item()
+            
+            self._backpropagate(loss, step)
+        
+        avg_loss = epoch_loss / len(self.train_loader)
+        avg_iou_loss = epoch_iou_loss / len(self.train_loader)
+
+        wandb.log({
+            "epoch": epoch + 1,
+            "avg_train_loss": avg_loss,
+            "avg_iou_loss": avg_iou_loss,
+            "learning_rate": self.optimizer.param_groups[0]['lr']
+        })
+        print(f"Epoch [{epoch+1}/{self.num_epochs}] - Avg Train Loss: {avg_loss:.4f}, Avg IoU Loss: {avg_iou_loss:.4f}")
+            
+        return avg_loss, avg_iou_loss
+
+    def valid(self, epoch, avg_train_loss, avg_train_iou_loss):
+        """
+        Swin Transformer를 위한 validation 함수를 사용하도록 오버라이드
+        """
+        dice, IoU = validation_swin(
+            epoch + 1, 
+            self.model, 
+            self.val_loader, 
+            self.criterion, 
+            self.classes,
+            self.config
+        )
+        
+        # WandB에 메트릭 로깅
+        wandb.log({
+            "epoch": epoch + 1,
+            "dice_coefficient": dice,
+            "iou": IoU
+        })
+        
+        # Save CheckPoints
+        if self.best_dice < dice:
+            self._save_best_model(epoch, dice, IoU)
+
+    def _backpropagate(self, loss, step):
+        """
+        기존 _backpropagate 메소드 사용
+        """
+        super()._backpropagate(loss, step)
+
+    def _optimizer_step(self):
+        if self.mixed_precision:
+            # Gradient clipping 추가
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+        else:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
+            self.optimizer.step()
+        
+        self.optimizer.zero_grad(set_to_none=True)
