@@ -23,7 +23,7 @@ class Trainer:
         self.criterion = criterion
         self.optimizer = optimizer
         self.config = config
-        self.scaler = torch.amp.GradScaler()
+        self.scaler = torch.cuda.amp.GradScaler()
         self.sweep_mode = sweep_mode
         
         # 하이퍼파라미터 초기화

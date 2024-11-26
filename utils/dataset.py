@@ -161,11 +161,11 @@ class XRayDataset(Dataset):
             
         return image, label
     
-        def save_visualization(self, image, label, image_name):
+    def save_visualization(self, image, label, image_name):
         # 이미지와 label을 시각화하여 저장
         image_np = image.numpy().transpose(1, 2, 0) * 255  # channel last로 변환
         image_np = image_np.astype(np.uint8)
-        
+    
         # 각 클래스에 대해 다른 색상으로 label을 시각화
         for i in range(label.shape[0]):
             mask = label[i].numpy()
