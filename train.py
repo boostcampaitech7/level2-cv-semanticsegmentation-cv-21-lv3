@@ -1,9 +1,6 @@
 import argparse
 
 import wandb
-from tqdm import tqdm
-import albumentations as A
-from segmentation_models_pytorch.losses import DiceLoss
 
 import torch
 from torch.utils.data import DataLoader
@@ -13,7 +10,6 @@ import torch.nn as nn
 from models.model import ModelSelector
 from utils.util import load_config 
 from utils.dataset import XRayDataset
-from utils.scheduler import LRSchedulerSelector
 from utils.loss import LossSelector
 from utils.transforms import get_transforms
 from trainer.trainer import Trainer
