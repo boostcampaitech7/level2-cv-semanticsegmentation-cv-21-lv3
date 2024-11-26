@@ -2,7 +2,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 
-def get_transforms(is_train=True):
+def get_transforms(is_train=True, size=512):
     return A.Compose(
         [
             *( 
@@ -23,7 +23,7 @@ def get_transforms(is_train=True):
                 if is_train else []
             ),
             # 공통으로 들어가는 Transform
-            A.Resize(512, 512),
+            A.Resize(size, size),
             A.ToFloat(max_value=255), # Normalize
             ToTensorV2(transpose_mask=True)
         ]

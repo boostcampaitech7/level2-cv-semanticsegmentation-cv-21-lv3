@@ -1,11 +1,8 @@
 import argparse
 
 import wandb
-
 import torch
 from torch.utils.data import DataLoader
-import torch.optim as optim
-import torch.nn as nn
 
 from models.model import ModelSelector
 from utils.util import load_config 
@@ -13,23 +10,37 @@ from utils.dataset import XRayDataset
 from utils.loss import LossSelector
 from utils.transforms import get_transforms
 from trainer.trainer import Trainer
+from utils.optimizer import get_optimizer
+
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Model configuration from command line.')
+    parser.add_argument('--model_name', type=str, help='Name of the model', default='FPN')
+    parser.add_argument('--encoder_name', type=str, help='Name of the encoder', default='resnet152')
+    parser.add_argument('--optimizer', type=str, help='Optimizer to use', default='adam')
+    parser.add_argument('--resize', type=int, help='Reshape size', default=512)
+    parser.add_argument('--batch_size', type=int, help='Batch size', default=4)
+    parser.add_argument('--model_path', type=str, required=False, help='Path to the model file')
+
+    return parser.parse_args()
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model_path', type=str, required=False, help='Path to the model file')
-    args = parser.parse_args()
-    model_path = args.model_path   
+    args = parse_arguments()
     # WandB 로그인
     wandb.login()
     
-    train_tf = get_transforms(is_train=True)
-    valid_tf = get_transforms(is_train=False)
+    train_tf = get_transforms(is_train=True, size=args.resize)
+    valid_tf = get_transforms(is_train=False, size=args.resize)
 
     data_root = config['DATA_ROOT']
     img_root = f"{data_root}/train/DCM"
     label_root = f"{data_root}/train/outputs_json"
     classes = config['CLASSES']
-    batch_size = config['BATCH_SIZE']
+    batch_size = args.batch_size
+    
+    config['model']['model_name'] = args.model_name if args.model_name else config['model']['model_name']
+    config['model']['encoder_name'] = args.encoder_name if args.encoder_name else config['model']['encoder_name']
    
     train_dataset = XRayDataset(
         is_train=True,
@@ -62,7 +73,7 @@ def main():
         drop_last=False
     )
 
-    if model_path is None:
+    if args.model_path is None:
         # model
         model_selector = ModelSelector(
             config=config['model'],
@@ -70,16 +81,16 @@ def main():
         )
         model = model_selector.get_model()
     else: # fine tuning
-        model = torch.load(model_path)
+        model = torch.load(args.model_path)
     model = model.cuda()
     
     # Loss function
-    #criterion = DiceLoss(mode="multilabel")
     loss_selector = LossSelector(config['loss'])
     criterion = loss_selector.get_loss()
 
-    # Optimizer
-    optimizer = optim.AdamW(params=model.parameters(), lr=config['LR'], weight_decay=1e-6)
+    # Use the get_optimizer function from optimizer.py
+    optimizer = get_optimizer(args.optimizer, model.parameters(), config['LR'])
+    print(f'optimizer: {optimizer}, model_name: {config["model"]["model_name"]}, encoder_name: {config["model"]["encoder_name"]}')
     
     # Trainer 클래스 인스턴스 생성
     trainer = Trainer(
