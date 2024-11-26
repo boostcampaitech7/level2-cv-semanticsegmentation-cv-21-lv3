@@ -79,6 +79,8 @@ class LRSchedulerSelector:
             return self._get_cyclic_lr()
         elif self.scheduler_type == 'custom_cosine_warmup':
             return self._get_cosine_annealing_warm_up_restarts()
+        elif self.scheduler_config == 'rlp':
+             return self._get_ReduceLROnPlateau()
         else:
             raise ValueError(f"지원하지 않는 스케줄러 타입입니다: {self.scheduler_type}")
 
@@ -157,3 +159,13 @@ class LRSchedulerSelector:
             T_up=self.scheduler_config.get('t_up', 0),
             gamma=self.scheduler_config.get('gamma', 1.0)
         ) 
+    
+    def _get_ReduceLROnPlateau(self):
+        """
+        ReduceLROnPlateau
+        """
+        return optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode=self.scheduler_config.get('mode','min'),
+            patience=self.scheduler_config.get('patience',10)
+        )
