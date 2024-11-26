@@ -55,7 +55,7 @@ class Trainer:
         self.model.train()
         epoch_loss = 0.0
         epoch_iou_loss = 0.0
-        
+        max_norm = 5
         # Training loop
         for step, (images, masks) in tqdm(enumerate(self.train_loader), 
                                         total=len(self.train_loader), 
@@ -63,21 +63,20 @@ class Trainer:
             images, masks = images.cuda(), masks.cuda()
             outputs = self.model(images)
             outputs = outputs['out'] if isinstance(outputs, dict) and 'out' in outputs else outputs
-            
             # Loss 계산
             loss = self.criterion(outputs, masks)
             epoch_loss += loss.item()
-
+            
             # IoU Loss 계산
             outputs = (torch.sigmoid(outputs) > 0.5).float()  # threshold 적용
             epoch_iou_loss += (1.0 - iou(masks, outputs)).mean().item()
-            
+
             self._backpropagate(loss, step)
-        
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm)
+
         # 에폭당 평균 train loss / train iou loss 계산
         avg_loss = epoch_loss / len(self.train_loader)
         avg_iou_loss = epoch_iou_loss / len(self.train_loader)
-
         # 로그 출력
         wandb.log({
             "epoch": epoch + 1,
@@ -159,19 +158,9 @@ class Trainer:
         os.makedirs(self.save_dir, exist_ok=True)       
 
         # 모델 저장
-        wandb.unwatch(self.model)
         output_path = os.path.join(self.save_dir, f'{self.save_name}.pt')
         torch.save(self.model, output_path)
         print(f"Model saved to {output_path}")
-
-        # WandB에 메트릭 로깅
-        # artifact = wandb.Artifact(
-        #     name=self.save_name, 
-        #     type="model",
-        #     description=f"Best model with dice score: {dice:.4f}, iou score: {IoU:.4f}"
-        # )
-        # artifact.add_file(output_path)
-        # wandb.log_artifact(artifact)
 
     def train(self):
         """
@@ -183,12 +172,23 @@ class Trainer:
         # 시드 고정
         set_seed(42)
 
+        # WandB 초기화
+        wandb.init(
+            entity="ppp6131-yonsei-university",
+            project="boostcamp7th_semantic_segmentation",
+            config=self.config,
+            group=self.model_name
+        )
+
         # sweep 하이퍼파라미터 설정
         if self.sweep_mode:
-            self.num_epochs = wandb.config.num_epochs
-            self.batch_size = wandb.config.batch_size
-            self.optimizer.param_groups[0]['lr'] = wandb.config.learning_rate
-            print(f"lr:{self.optimizer.param_groups[0]['lr']}, batch_size:{self.batch_size}")
+            # self.num_epochs = wandb.config.num_epochs
+            # self.batch_size = wandb.config.batch_size
+            # self.optimizer.param_groups[0]['lr'] = wandb.config.learning_rate
+            self.criterion._set_weight(wandb.config.dice_weight)
+            dice_weight, bce_weight = self.criterion._get_weight()
+            print(f"dice_weight:{dice_weight}, bce_weight:{bce_weight}")
+            #print(f"lr:{self.optimizer.param_groups[0]['lr']}, batch_size:{self.batch_size}")
 
         # 저장될 모델 이름 설정
         self.lr_scheduler_type = self.config.get("lr_scheduler", {}).get("type", "default") 
@@ -196,18 +196,11 @@ class Trainer:
                          if not 'lr_scheduler' in self.config else \
                          f'{self.model_name}_{self.lr_scheduler_type}_{self.batch_size}_{time.strftime("%Y%m%d_%H%M%S")}'   
 
-        # WandB 초기화
-        wandb.init(
-            entity="ppp6131-yonsei-university",
-            project="boostcamp7th_semantic_segmentation",
-            config=self.config,
-            name=self.save_name,
-            group=self.model_name
-        )
+        # 저장될 모델 이름 Wandb에 적용
+        wandb.run.name = self.save_name
 
         # 학습 수행
         for epoch in range(self.num_epochs):
-            wandb.watch(self.model, self.criterion, log="all", log_freq=100)
             avg_train_loss, avg_train_iou_loss = self._train_epoch(epoch)
             if (epoch + 1) % self.interver == 0:
                 self.valid(epoch, avg_train_loss, avg_train_iou_loss)
