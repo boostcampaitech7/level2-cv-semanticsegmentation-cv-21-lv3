@@ -1,6 +1,34 @@
+import numpy as np
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from segmentation_models_pytorch.losses import *
+from kornia.filters import Laplacian
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class IoUWithDICE(nn.Module):
+    def __init__(self, dice_weight=0.5, IoU_weight=0.5):
+        super().__init__()
+        self.dice_weight = dice_weight
+        self.IoU_weight = IoU_weight
+        self.dice = DiceLoss(mode="multilabel")
+        self.IoU_loss = JaccardLoss(mode="multilabel")
+
+    def _set_weight(self, weight=0.5):
+        self.dice_weight = weight
+        self.IoU_weight = 1 - weight
+
+    def _get_weight(self):
+        return self.dice_weight, self.IoU_weight
+
+    def forward(self, inputs, targets):
+        IoU_loss = self.IoU_loss(inputs, targets) 
+        dice_loss = self.dice(inputs, targets) 
+        return self.IoU_weight * IoU_loss + self.dice_weight * dice_loss
 
 class BCEWithDICE(nn.Module):
     def __init__(self, dice_weight=0.5, bce_weight=0.5):
@@ -9,6 +37,13 @@ class BCEWithDICE(nn.Module):
         self.bce_weight = bce_weight
         self.dice = DiceLoss(mode="multilabel")
         self.bce = nn.BCEWithLogitsLoss()
+
+    def _set_weight(self, weight=0.5):
+        self.dice_weight = weight
+        self.bce_weight = 1 - weight
+
+    def _get_weight(self):
+        return self.dice_weight, self.bce_weight
 
     def forward(self, inputs, targets):
         bce_loss = self.bce(inputs, targets)  # Corrected reference
@@ -36,6 +71,8 @@ class LossSelector:
             return self._get_dice_loss()
         elif self.loss_type == 'bcewithdice':
             return self._get_bcewithdice_loss()
+        elif self.loss_type == 'iouwithdice':
+            return self._get_iouwithdice_loss()
         else:
             raise ValueError(f"지원하지 않는 손실함수 타입입니다: {self.loss_type}")
 
@@ -60,3 +97,11 @@ class LossSelector:
         d_w = self.loss_params.get('dice_weight', 0.5)
         b_w = self.loss_params.get('bce_weight', 0.5)
         return BCEWithDICE(dice_weight=d_w, bce_weight=b_w)
+    
+    def _get_iouwithdice_loss(self):
+        """
+        Combined Boundaryloss and DiceLoss
+        """
+        d_w = self.loss_params.get('dice_weight', 0.5)
+        i_w = self.loss_params.get('IoU_weight', 0.5)
+        return IoUWithDICE(dice_weight=d_w, IoU_weight=i_w)
