@@ -23,7 +23,7 @@ class Trainer:
         self.criterion = criterion
         self.optimizer = optimizer
         self.config = config
-        self.scaler = torch.cuda.amp.GradScaler()
+        self.scaler = torch.amp.GradScaler()
         self.sweep_mode = sweep_mode
         
         # 하이퍼파라미터 초기화
@@ -122,7 +122,6 @@ class Trainer:
         dice, IoU = validation(epoch + 1, self.model, self.val_loader, self.criterion, self.classes)
         
         # WandB에 메트릭 로깅
-        # WandB에 메트릭 로깅
         wandb.log({
             "epoch": epoch + 1,
             "dice_coefficient": dice,
@@ -131,24 +130,11 @@ class Trainer:
         
         # Save CheckPoints
         if self.best_dice < dice:
-            self._save_best_model(epoch, dice, IoU)
+            print(f"Best performance at epoch: {epoch + 1}, {self.best_dice:.4f} -> {dice:.4f}")
+            # 모델 저장
+            self.save_checkpoint()
 
-    def _save_best_model(self, epoch, dice, IoU):
-        """
-        Save the best model.
-
-        :param epoch: The current epoch number
-        :param dice: The Dice score of the current epoch
-        :param IoU: The IoU score of the current epoch
-        """
-        print(f"Best performance at epoch: {epoch + 1}, {self.best_dice:.4f} -> {dice:.4f}")
-        self.best_dice = dice
-        self.best_iou = IoU
-        
-        # 모델 저장
-        self.save_checkpoint(dice, IoU)
-
-    def save_checkpoint(self, dice, IoU):
+    def save_checkpoint(self):
         """
         Save the model checkpoint.
 
@@ -192,7 +178,7 @@ class Trainer:
 
         # 저장될 모델 이름 설정
         self.lr_scheduler_type = self.config.get("lr_scheduler", {}).get("type", "default") 
-        self.save_name = f'{self.model_name}_{self.lr}_{self.batch_size}_{time.strftime("%Y%m%d_%H%M%S")}' \
+        self.save_name = f'{self.model_name}_{self.lr}_{self.batch_size}_{time.strftime("%Y%m%d_%H%M%S")}size_down ' \
                          if not 'lr_scheduler' in self.config else \
                          f'{self.model_name}_{self.lr_scheduler_type}_{self.batch_size}_{time.strftime("%Y%m%d_%H%M%S")}'   
 

@@ -160,3 +160,29 @@ class XRayDataset(Dataset):
             label = result["mask"]
             
         return image, label
+    
+        def save_visualization(self, image, label, image_name):
+        # 이미지와 label을 시각화하여 저장
+        image_np = image.numpy().transpose(1, 2, 0) * 255  # channel last로 변환
+        image_np = image_np.astype(np.uint8)
+        
+        # 각 클래스에 대해 다른 색상으로 label을 시각화
+        for i in range(label.shape[0]):
+            mask = label[i].numpy()
+            color = (np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255))
+            image_np[mask > 0] = image_np[mask > 0] * 0.5 + np.array(color) * 0.5
+
+        # 결과 이미지 저장
+        save_path = os.path.join("visualizations_calcul", f"visual_{image_name}")
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        cv2.imwrite(save_path, image_np)
+        
+    def save_image_visualization(self, image, image_name):
+        # 이미지 시각화하여 저장
+        image_np = image.numpy().transpose(1, 2, 0) * 255  # channel last로 변환
+        image_np = image_np.astype(np.uint8)
+
+        # 결과 이미지 저장
+        save_path = os.path.join("visualizations_image", f"visual_{image_name}")
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        cv2.imwrite(save_path, image_np)
