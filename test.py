@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from utils.util import encode_mask_to_rle, load_config
 from utils.dataset import XRayInferenceDataset
 
-def save_csv(rles, filename_and_class, save_root='./output/'):
+def save_csv(rles, filename_and_class,model_name='output', save_root='./output/'):
     classes, filename = zip(*[x.split("_") for x in filename_and_class])
     image_name = [os.path.basename(f) for f in filename]
     
@@ -22,7 +22,7 @@ def save_csv(rles, filename_and_class, save_root='./output/'):
         "rle": rles,
     })
     
-    df.to_csv(f"{save_root}output.csv", index=False)
+    df.to_csv(f"{save_root}{model_name}.csv", index=False)
 
 def test(model, data_loader, classes, thr=0.5):
     CLASS2IND = {v: i for i, v in enumerate(classes)}
@@ -62,12 +62,14 @@ def main():
     
     config = load_config('./config/config.json')
     model_path = args.model_path 
+    model_name = model_path.split('.')[1].split('/')[2]
+    print(model_name)
     os.path.exists(model_path)
 
     model = torch.load(model_path)
     classes = config['CLASSES']
 
-    tf = A.Resize(512, 512)
+    tf = A.Resize(1024,1024)
     test_dataset = XRayInferenceDataset(
         transforms=tf,
         img_root=f"{config['DATA_ROOT']}/test/DCM",
@@ -81,7 +83,7 @@ def main():
         drop_last=False
     )
     rles, filename_and_class = test(model, test_loader,classes)
-    save_csv(rles, filename_and_class)
+    save_csv(rles, filename_and_class, model_name)
 
 if __name__ == '__main__':
     main()
