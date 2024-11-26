@@ -131,6 +131,8 @@ class Trainer:
         # Save CheckPoints
         if self.best_dice < dice:
             print(f"Best performance at epoch: {epoch + 1}, {self.best_dice:.4f} -> {dice:.4f}")
+            self.best_dice = dice
+            self.best_iou = IoU
             # 모델 저장
             self.save_checkpoint()
 
