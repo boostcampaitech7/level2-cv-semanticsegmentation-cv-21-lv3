@@ -75,15 +75,16 @@ class ModelSelector:
                 num_classes=num_classes,
                 pretrained=config["pretrained"]
             )
-        
         elif 'smp' in config['type']:
-            self.model = SMPModel(
-                model_name=config["model_name"],
+            model_class = getattr(smp, config["model_name"])
+
+            # 모델 초기화
+            self.model = model_class(
                 encoder_name=config["encoder_name"],
-                num_classes=num_classes,
-                encoder_weights=config["encoder_weights"]
+                encoder_weights=config["encoder_weights"],
+                classes=num_classes,
+                decoder_attention_type=config.get("decoder_attention_type",None)
             )
-        
         else:
             raise ValueError("Unknown model type specified.")
 
