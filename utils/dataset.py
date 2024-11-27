@@ -632,15 +632,57 @@ class HRNetXRayDataset(Dataset):
         return len(self.filenames)
 
 class HRNetXRayInferenceDataset(Dataset):
-    """추론을 위한 HRNet 데이터셋"""
-    def __init__(self, 
-                 transforms=None,
-                 img_root=None,
-                 classes=[],
-                 config=None
-                 ):
+    def __init__(
+        self,
+        transforms=None,
+        img_root=None,
+        classes=[],
+        config=None
+    ):
         self.classes = classes
         self.img_root = img_root
         self.transforms = transforms
         self.img_size = config['model'].get('img_size', 512)
         self.filenames = self.load_filenames()
+        
+        print(f"\nDataset Info:")
+        print(f"Number of test samples: {len(self.filenames)}")
+        print(f"Input image size: {self.img_size}x{self.img_size}")
+
+    def load_filenames(self):
+        pngs = {
+            os.path.relpath(os.path.join(root, fname), start=self.img_root)
+            for root, _dirs, files in os.walk(self.img_root)
+            for fname in files
+            if os.path.splitext(fname)[1].lower() == ".png"
+        }
+        return np.array(sorted(pngs))
+
+    def __len__(self):
+        return len(self.filenames)
+    
+    def __getitem__(self, item):
+        image_name = self.filenames[item]
+        image_path = os.path.join(self.img_root, image_name)
+        
+        # 이미지 로드 및 전처리
+        image = cv2.imread(image_path)
+        if image is None:
+            raise ValueError(f"Failed to load image: {image_path}")
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = cv2.resize(image, (self.img_size, self.img_size))
+        
+        # transforms 적용
+        if self.transforms is not None:
+            transformed = self.transforms(image=image)
+            image = transformed["image"]
+            
+        # Debug info for first item
+        if item == 0:
+            print(f"\nFirst item info:")
+            print(f"Image shape: {image.shape}")
+            print(f"Image dtype: {image.dtype}")
+            if isinstance(image, torch.Tensor):
+                print(f"Image value range: [{image.min():.3f}, {image.max():.3f}]")
+        
+        return image, image_name

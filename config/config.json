@@ -9,10 +9,10 @@
         "Trapezoid", "Capitate", "Hamate", "Scaphoid", "Lunate",
         "Triquetrum", "Pisiform", "Radius", "Ulna"
     ],
-    "NUM_EPOCHS": 150,
+    "NUM_EPOCHS": 100,
     "BATCH_SIZE": 4,
     "LR": 0.0001,
-    "VAL_INTERVER": 15,
+    "VAL_INTERVER": 20,
     "model": {
         "type": "hrnet_ocr",
         "model_name": "hrnet_ocr",
@@ -26,7 +26,7 @@
        "aux_weight": 0.4,
        "use_checkpoint": true
     },
-    "VAL_BATCH_SIZE": 2,
+    "VAL_BATCH_SIZE": 4,
     "accumulation_steps": 4,
     "mixed_precision": true,
     "loss": {

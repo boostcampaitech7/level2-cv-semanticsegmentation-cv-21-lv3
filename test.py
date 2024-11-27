@@ -8,9 +8,11 @@ import albumentations as A
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from albumentations.pytorch import ToTensorV2
+
 
 from utils.util import encode_mask_to_rle, load_config
-from utils.dataset import XRayInferenceDataset, SwinXRayInferenceDataset, BeitXRayInferenceDataset  # 수정된 import
+from utils.dataset import XRayInferenceDataset, SwinXRayInferenceDataset, BeitXRayInferenceDataset, HRNetXRayInferenceDataset  # 수정된 import
 
 def save_csv(rles, filename_and_class, save_root='./output/'):
    # 기존 코드 유지
@@ -81,12 +83,15 @@ def main():
    
    # 수정된 코드
     tf = A.Compose([
-       A.Resize(config['model'].get('img_size', 384), config['model'].get('img_size', 384)),
-       A.Normalize()
-       ])
+    A.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    ),
+    ToTensorV2(transpose_mask=False)  # [H, W, C] -> [C, H, W]로 변환
+])
 
    # Dataset 선택
-    Dataset = BeitXRayInferenceDataset
+    Dataset = HRNetXRayInferenceDataset
     test_dataset = Dataset(
        transforms=tf,
        img_root=f"{config['DATA_ROOT']}/test/DCM",
@@ -97,7 +102,7 @@ def main():
    # 수정된 코드
     test_loader = DataLoader(
        dataset=test_dataset, 
-       batch_size=2,  # SwinV2-L을 위한 작은 배치 사이즈
+       batch_size=4,  # SwinV2-L을 위한 작은 배치 사이즈
        shuffle=False,
        num_workers=4,  # 메모리 효율을 위해 감소
        pin_memory=True,
