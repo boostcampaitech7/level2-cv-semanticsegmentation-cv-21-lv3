@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from utils.util import encode_mask_to_rle, load_config
-from utils.dataset import XRayInferenceDataset, SwinXRayInferenceDataset  # 수정된 import
+from utils.dataset import XRayInferenceDataset, SwinXRayInferenceDataset, BeitXRayInferenceDataset  # 수정된 import
 
 def save_csv(rles, filename_and_class, save_root='./output/'):
    # 기존 코드 유지
@@ -83,10 +83,10 @@ def main():
     tf = A.Compose([
        A.Resize(config['model'].get('img_size', 384), config['model'].get('img_size', 384)),
        A.Normalize()
-   ])
+       ])
 
    # Dataset 선택
-    Dataset = SwinXRayInferenceDataset if config['model']['type'] == 'timm' else XRayInferenceDataset
+    Dataset = BeitXRayInferenceDataset
     test_dataset = Dataset(
        transforms=tf,
        img_root=f"{config['DATA_ROOT']}/test/DCM",

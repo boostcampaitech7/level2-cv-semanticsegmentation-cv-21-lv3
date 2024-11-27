@@ -3,7 +3,7 @@ from albumentations.pytorch import ToTensorV2
 
 
 def get_transforms(config, is_train=True):
-    img_size = config['model'].get('img_size', 384)
+    img_size = config['model'].get('img_size', 512)
     return A.Compose(
         [
             *( 
@@ -16,6 +16,7 @@ def get_transforms(config, is_train=True):
                     border_mode=4,
                     p=0.7
                 ),
+                 A.HorizontalFlip(p=0.5),
         
                 # 밝기/대비 조정
                 A.OneOf([
@@ -48,9 +49,7 @@ def get_transforms(config, is_train=True):
                     ),
             # 공통으로 들어가는 Transform
             A.Resize(img_size,img_size),
-            A.Normalize(
-                mean=[0.485, 0.456, 0.406],  # ImageNet statistics
-                std=[0.229, 0.224, 0.225]),
+            A.Normalize(),
             ToTensorV2(transpose_mask=True)
         ],   
     )

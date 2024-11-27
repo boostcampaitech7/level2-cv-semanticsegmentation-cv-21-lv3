@@ -156,11 +156,18 @@ class Trainer:
         :param dice: The Dice score of the current epoch
         :param IoU: The IoU score of the current epoch
         """
-        os.makedirs(self.save_dir, exist_ok=True)       
+        os.makedirs(self.save_dir, exist_ok=True)   
+        if 'model_name' in self.config['model']:
+            model_name = self.config['model']['model_name'].replace('/', '_')
+        else:
+            model_name = self.model_name.replace('/', '_')
+
+        # 모델 저장 경로 생성
+        save_name = f'{model_name}_{self.lr}_{self.batch_size}_{time.strftime("%Y%m%d_%H%M%S")}'    
 
         # 모델 저장
         wandb.unwatch(self.model)
-        output_path = os.path.join(self.save_dir, f'{self.save_name}.pt')
+        output_path = os.path.join(self.save_dir, f'{save_name}.pt')
         torch.save(self.model, output_path)
         print(f"Model saved to {output_path}")
 
@@ -310,3 +317,202 @@ class SwinTrainer(Trainer):
             self.optimizer.step()
         
         self.optimizer.zero_grad(set_to_none=True)
+        
+      
+class BeitTrainer(Trainer):
+    def __init__(self, model, train_loader, val_loader, optimizer, criterion, config, sweep_mode):
+        super().__init__(model, train_loader, val_loader, optimizer, criterion, config, sweep_mode)
+        
+        # BEiT 특화 설정
+        self.mixed_precision = True
+        self.accumulation_steps = config.get('accumulation_steps', 4)
+        
+        # 메모리 최적화 설정
+        torch.backends.cudnn.benchmark = True  #속도 향상
+        
+        if torch.cuda.is_available():
+            # 더 빠른 DataLoader
+            self.train_loader.pin_memory = True
+            self.val_loader.pin_memory = True
+        
+        # DICE loss를 위한 설정
+        self.use_dice = True
+        
+        if not self.sweep_mode and 'lr_scheduler' not in config:
+            self.scheduler = self._get_default_beit_scheduler()
+
+    def _train_epoch(self, epoch):
+        self.model.train()
+        epoch_loss = 0.0
+        epoch_dice_score = 0.0
+        
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
+        for step, (images, masks) in tqdm(enumerate(self.train_loader), 
+                                        total=len(self.train_loader), 
+                                        desc=f'Epoch {epoch+1}/{self.num_epochs}'):
+            images = images.cuda().float()
+            masks = masks.cuda().float()
+            
+            # Forward pass
+            outputs = self.model(images)
+            
+            # Loss 계산 - BeitDiceLoss가 auxiliary loss 처리
+            loss = self.criterion(outputs, masks)
+            
+            # Metrics 계산
+            with torch.no_grad():
+                if isinstance(outputs, dict):
+                    outputs = outputs['out']
+                outputs = torch.sigmoid(outputs)
+                dice_score = 1 - self.criterion.compute_dice_loss(outputs, masks)
+                epoch_dice_score += dice_score.item()
+            
+            epoch_loss += loss.item()
+            self._backpropagate(loss, step)
+        
+        avg_loss = epoch_loss / len(self.train_loader)
+        avg_dice_score = epoch_dice_score / len(self.train_loader)
+        
+        # Logging
+        wandb.log({
+            "epoch": epoch + 1,
+            "train_loss": avg_loss,
+            "train_dice_score": avg_dice_score,
+            "learning_rate": self.optimizer.param_groups[0]['lr']
+        })
+        
+        return avg_loss, avg_dice_score
+    
+class HRNetTrainer(Trainer):
+   """
+   HRNet + OCR을 위한 Trainer Class
+   기본 Trainer에서 HRNet 특화 설정 추가
+   """
+   def __init__(self, model, train_loader, val_loader, optimizer, criterion, config, sweep_mode):
+       super().__init__(model, train_loader, val_loader, optimizer, criterion, config, sweep_mode)
+       
+       # HRNet 특화 설정
+       hrnet_config = config.get('hrnet_config', {})
+       self.aux_weight = hrnet_config.get('aux_weight', 0.4)
+       
+       # Mixed Precision 적용
+       self.mixed_precision = True
+       
+       # Gradient Accumulation steps 설정
+       self.accumulation_steps = config.get('accumulation_steps', 2)
+       
+       # Learning rate 설정
+       if not self.sweep_mode and 'lr_scheduler' not in config:
+           self.scheduler = self._get_default_hrnet_scheduler()
+
+   def _get_default_hrnet_scheduler(self):
+       """HRNet default scheduler 설정"""
+       from torch.optim.lr_scheduler import CosineAnnealingLR
+       return CosineAnnealingLR(
+           self.optimizer,
+           T_max=self.num_epochs,
+           eta_min=1e-6
+       )
+
+   def _train_epoch(self, epoch):
+       self.model.train()
+       epoch_loss = 0.0
+       epoch_iou_loss = 0.0
+       
+       if torch.cuda.is_available():
+           torch.cuda.empty_cache()
+       
+       for step, (images, masks) in tqdm(enumerate(self.train_loader), 
+                                       total=len(self.train_loader), 
+                                       desc=f'Epoch {epoch+1}/{self.num_epochs}'):
+           images = images.cuda().float()
+           masks = masks.cuda().float()
+           
+           # Forward pass
+           with torch.cuda.amp.autocast(enabled=self.mixed_precision):
+               outputs = self.model(images)
+               
+               # HRNet의 출력 처리 (main output + auxiliary output)
+               if isinstance(outputs, dict):
+                   loss = self.criterion(outputs, masks)  # HRNetOCRLoss가 처리
+                   outputs = outputs['out']  # IoU 계산은 main output으로
+               else:
+                   loss = self.criterion(outputs, masks)
+           
+           epoch_loss += loss.item()
+           
+           # IoU Loss 계산 (main output 사용)
+           with torch.no_grad():
+               pred_masks = (torch.sigmoid(outputs) > 0.5).float()
+               epoch_iou_loss += (1.0 - iou(masks, pred_masks)).mean().item()
+           
+           # Backpropagation
+           self._backpropagate(loss, step)
+       
+       avg_loss = epoch_loss / len(self.train_loader)
+       avg_iou_loss = epoch_iou_loss / len(self.train_loader)
+       
+       # Logging
+       wandb.log({
+           "epoch": epoch + 1,
+           "avg_train_loss": avg_loss,
+           "avg_iou_loss": avg_iou_loss,
+           "learning_rate": self.optimizer.param_groups[0]['lr']
+       })
+       print(f"Epoch [{epoch+1}/{self.num_epochs}] - Avg Train Loss: {avg_loss:.4f}, Avg IoU Loss: {avg_iou_loss:.4f}")
+       
+       return avg_loss, avg_iou_loss
+
+   def _backpropagate(self, loss, step):
+       """
+       Gradient accumulation을 포함한 역전파
+       """
+       if self.mixed_precision:
+           self.scaler.scale(loss / self.accumulation_steps).backward()
+           if (step + 1) % self.accumulation_steps == 0:
+               self.scaler.step(self.optimizer)
+               self.scaler.update()
+               self.optimizer.zero_grad()
+       else:
+           (loss / self.accumulation_steps).backward()
+           if (step + 1) % self.accumulation_steps == 0:
+               self.optimizer.step()
+               self.optimizer.zero_grad()
+
+   def valid(self, epoch, avg_train_loss, avg_train_iou_loss):
+       """
+       Validation with metrics logging
+       """
+       dice, IoU = validation(epoch + 1, self.model, self.val_loader, 
+                            self.criterion, self.classes)
+       
+       # Logging
+       wandb.log({
+           "epoch": epoch + 1,
+           "dice_coefficient": dice,
+           "iou": IoU
+       })
+       
+       # Save best model
+       if self.best_dice < dice:
+           print(f"Best performance at epoch: {epoch + 1}, {self.best_dice:.4f} -> {dice:.4f}")
+           self.best_dice = dice
+           self.best_iou = IoU
+           self.save_checkpoint(dice, IoU)
+
+   def _optimizer_step(self):
+       """
+       메모리 효율을 위한 최적화 단계
+       """
+       if self.mixed_precision:
+           self.scaler.step(self.optimizer)
+           self.scaler.update()
+       else:
+           self.optimizer.step()
+       
+       self.optimizer.zero_grad(set_to_none=True)
+       
+       if torch.cuda.is_available():
+           torch.cuda.empty_cache()
