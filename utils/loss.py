@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from segmentation_models_pytorch.losses import *
+import torch.nn.functional as F
+
 
 class BCEWithDICE(nn.Module):
     def __init__(self, dice_weight=0.5, bce_weight=0.5):
@@ -117,9 +119,7 @@ class BeitDiceLoss(nn.Module):
     def forward(self, predictions, targets):
         if isinstance(predictions, dict):
             main_pred = predictions['out']
-            
             main_loss = self.compute_dice_loss(main_pred, targets)
-            
             return main_loss 
         
         return self.compute_dice_loss(predictions, targets)

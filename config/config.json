@@ -1,5 +1,5 @@
 {   
-    "DATA_ROOT": "/data/ephemeral/home/data",
+    "DATA_ROOT": "./data",
     "SAVED_DIR": "./checkpoints",
     "CLASSES": [
         "finger-1", "finger-2", "finger-3", "finger-4", "finger-5",
@@ -9,16 +9,16 @@
         "Trapezoid", "Capitate", "Hamate", "Scaphoid", "Lunate",
         "Triquetrum", "Pisiform", "Radius", "Ulna"
     ],
-    "NUM_EPOCHS": 100,
-    "BATCH_SIZE": 4,
+    "NUM_EPOCHS": 20,
+    "BATCH_SIZE": 2,
     "LR": 0.0001,
-    "VAL_INTERVER": 20,
+    "VAL_INTERVER": 1,
     "model": {
-        "type": "hrnet_ocr",
-        "model_name": "hrnet_ocr",
+        "type": "beit",
+        "model_name": "microsoft/beit-large-finetuned-ade-640-640",
         "pretrained": true,
+        "img_size": 640,
         "original_size": 2048,
-        "img_size": 512,
         "patch_size": 16,
         "use_checkpoint": true
     },
@@ -26,15 +26,13 @@
        "aux_weight": 0.4,
        "use_checkpoint": true
     },
-    "VAL_BATCH_SIZE": 4,
+    "VAL_BATCH_SIZE": 2,
     "accumulation_steps": 4,
     "mixed_precision": true,
     "loss": {
-        "type": "hrnet_ocr",
+        "type": "beitdiceloss",
         "params": {
-            "aux_weight": 0.4,
-            "dice_weight": 0.7,
-            "bce_weight": 0.3
+            "smooth": 1e-5
         }
     },
     "trainer": {
@@ -42,7 +40,7 @@
     },
     "lr_scheduler": {
         "type": "cosine",
-        "t_initial": 50,
+        "t_initial": 30,
         "lr_min": 5e-6,
         "warmup_t": 5,
         "warmup_lr_init": 5e-7
@@ -50,8 +48,7 @@
     "optimizer": {
         "type": "adamw",
         "weight_decay": 0.05,
-        "betas": [0.9, 0.999],
-        "eps": 1e-8
+        "layer_decay": 0.8
     },
     "training": {
        "mixed_precision": true,

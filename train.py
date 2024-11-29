@@ -37,7 +37,12 @@ def main():
     batch_size = config['BATCH_SIZE']
     
     # Dataset 선택 (model type에 따라)
-    Dataset = HRNetXRayDataset
+    if config['model']['type'] == 'beit' :
+        Dataset = BeitXRayDataset
+    elif config['model']['type'] == 'HRnet':
+        Dataset = HRNetXRayDataset
+    else :
+        Dataset = XRayDataset
     
     train_dataset = Dataset(
         is_train=True,
@@ -98,8 +103,13 @@ def main():
     )
     
     # Trainer 선택 (model type에 따라)
-    TrainerClass = HRNetTrainer 
-    # if config['model']['type'] == 'beit' else Trainer
+    # Dataset 선택 (model type에 따라)
+    if config['model']['type'] == 'beit' :
+        TrainerClass = BeitTrainer
+    elif config['model']['type'] == 'HRnet':
+        TrainerClass = HRNetTrainer
+    else :
+        TrainerClass = Trainer
     
     trainer = TrainerClass(
         model=model,
