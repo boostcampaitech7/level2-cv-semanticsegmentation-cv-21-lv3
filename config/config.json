@@ -19,19 +19,21 @@
         "encoder_name": "timm-res2net50_26w_8s",
         "encoder_weights":"imagenet"
     },
+    "hrnet_config": {
+       "aux_weight": 0.4,
+       "use_checkpoint": true
+    },
+    "VAL_BATCH_SIZE": 2,
+    "accumulation_steps": 4,
+    "mixed_precision": true,
     "loss": {
         "type": "diceloss",
         "params": {
-            "include_background": false,
-            "softmax": true,
-            "other_act": null,  
-            "w_type": "Square",
-            "reduction": "mean",
-            
-            "iter": 3,
-            "smooth": 1e-5,
-            "alpha": null
+            "smooth": 1e-5
         }
+    },
+    "trainer": {
+        "aux_weight": 0.4
     },
     "lr_scheduler": {
         "type": "custom_cosine_warmup",
