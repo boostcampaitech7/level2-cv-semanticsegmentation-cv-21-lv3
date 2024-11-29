@@ -158,7 +158,10 @@ class XRayDataset(Dataset):
             
             image = result["image"]
             label = result["mask"]
-            
+        
+        # self.save_visualization(image, label, image_name)
+        # self.save_image_visualization(image, image_name)
+
         return image, label
     
     def save_visualization(self, image, label, image_name):

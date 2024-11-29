@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from segmentation_models_pytorch.losses import *
-from kornia.filters import Laplacian
 
 import torch
 import torch.nn as nn
@@ -52,7 +51,7 @@ class BCEWithDICE(nn.Module):
 
 class LossSelector:
     def __init__(self, loss_config):
-        """s
+        """
         Initialize LossSelector with configuration.
         :param loss_config: dict containing loss type and its parameters.
         """

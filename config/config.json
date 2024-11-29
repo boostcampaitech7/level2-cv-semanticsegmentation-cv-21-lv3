@@ -10,30 +10,17 @@
         "Triquetrum", "Pisiform", "Radius", "Ulna"
     ],
     "NUM_EPOCHS": 100,
-    "BATCH_SIZE": 4,
+    "BATCH_SIZE": 2,
     "LR": 0.0001,
     "VAL_INTERVER": 5,
     "model": {
         "type": "smp",
-        "model_name": "FPN",
-        "encoder_name": "resnet152",
+        "model_name": "UnetPlusPlus",
+        "encoder_name": "timm-res2net50_26w_8s",
         "encoder_weights":"imagenet"
     },
     "loss": {
         "type": "diceloss",
-        "DiceLoss / GeneralizedDiceLoss_params_annotations": {
-            "include_background": "배경 제외 여부 인자                           (Default = True)",
-            "softmax": "softmax 활성화 함수 사용 여부 인자                        (Default = True)",
-            "other_act": "softmax 외 활성화 함수 사용 여부 인자                   (Default = null)",
-            "w_type": "클래스별 가중치 계산 방식 인자 [square, simple, uniform]    (Default = square)",
-            "reduction": "배치별 Loss 값 계산 방식 인자 [None, mean, sum]         (Default = mean)"
-        },
-        "SoftclDiceLoss / SoftDiceclDiceLoss_params_annotations": {
-            "iter": "skeletonization(= 객체 형태 단순화하여 가장 중요한 구조적 특성만 남기는 과정) 반복 횟수 (Default = 3.0 (임의 지정))",
-            "smooth": "예측된 마스크 또는 경계를 부드럽게 변환                                           (Default = 1e-5)",
-            "alpha": "cldice 가중치 조정 (클래스 불균형 해소) 파라미터                                   (Default = null)"
-        },
-
         "params": {
             "include_background": false,
             "softmax": true,
@@ -48,9 +35,9 @@
     },
     "lr_scheduler": {
         "type": "custom_cosine_warmup",
-        "t_0": 30,
+        "t_0": 20,
         "t_mult": 2,
-        "eta_max": 0.0002,
+        "eta_max": 0.001,
         "t_up": 5,
         "gamma": 0.9
     }

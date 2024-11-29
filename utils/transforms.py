@@ -7,11 +7,12 @@ def get_transforms(is_train=True, size=512):
         [
             *( 
                 # is_train = True일때 적용되는 증강
-                [A.CLAHE(clip_limit=(2, 4), tile_grid_size=(8, 8)),
-                 A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p=0.5),  # Edge enhancement
-                 A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.1, p=0.7),
+                [A.RandomScale(scale_limit=0.1, p=1),
                  A.Rotate(limit=10, p=0.5),
                  A.HorizontalFlip(p=0.5),
+                 A.CLAHE(clip_limit=(2, 4), tile_grid_size=(8, 8)),
+                 A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p=0.5),  # Edge enhancement
+                 A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.1, p=0.7),
                  A.CoarseDropout(
                      max_holes=32,  # 마스킹할 최대 영역 개수 (기본값: 8)
                      max_height=32,  # 마스킹할 영역의 최대 높이 (기본값: 8)
