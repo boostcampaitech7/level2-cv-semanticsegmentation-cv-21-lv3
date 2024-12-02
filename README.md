@@ -98,7 +98,7 @@ Dice coefficient는 Segmentation에서 사용하는 대표적인 성능 측정 �
 
 
 ## Requirements
-
+```
 opencv-python-headless==4.10.0.84
 pandas==2.2.3
 scikit-learn==1.5.2
@@ -107,11 +107,9 @@ matplotlib==3.9.2
 segmentation-models-pytorch==0.3.0
 tmux
 tqdm
-monai
 wandb
 transformer
-
-
+```
 ## Citation
 
 ```
