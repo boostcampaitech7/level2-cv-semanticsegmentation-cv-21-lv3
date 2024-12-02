@@ -3,8 +3,7 @@
 ## Hand X-ray Bone semantic Segmentation
 ### 2024.11.13 10:00 ~ 2024.11.28 19:00
 
-
-![image](https://github.com/user-attachments/assets/7dea38fd-73e4-4100-807b-179e1aac4c84)
+![image](https://github.com/user-attachments/assets/2046c625-00b8-48e6-b63a-505076dccddd)
 ## Description
  뼈는 우리 몸의 구조와 기능에 중요한 영향을 미치는 신체 조직이다. 이에 따라 정확한 Bone Segmentation은 의료 진단 및 치료 계획을 개발하는 데 필수적인 역할을 수행하며, 이에 따라 bone segmentation은 딥러닝 기반 인공지능 분야의 중요한 응용 분야로써 다양한 연구가 이뤄지고 있다. 그럼에도 정확한 bone segmentation은 여전히 많은    어려움을 수반한다. 이 문제를 해결하기 위해 본 프로젝트에서는 hand bone X-ray 이미지에서 29가지의 뼈 클래스에 대한 확률 맵을 갖는 멀티채널 예측을 수행하고, 이를 기반으로 각 픽셀에 해당 클래스를 할당하는 Semantic Segmentation 모델을 개발하고자 한다.
 
@@ -24,9 +23,9 @@ Dice coefficient는 Segmentation에서 사용하는 대표적인 성능 측정 �
 
 
 ## Contributor
-| <img src="https://github.com/user-attachments/assets/a669d334-7820-4e28-8a05-5a9d745ddc42" alt="박동준" style="width:100px; height:100px;"> |  |  |  | <a href="https://github.com/MinSeok1204"><img src="https://avatars.githubusercontent.com/MinSeok1204" alt="최민석" style="width:100px; height:100px;"></a> | <a href="https://github.com/airacle100"><img src="https://avatars.githubusercontent.com/airacle100" alt="윤정우" style="width:100px; height:100px;"></a> |
+| <img src="https://github.com/user-attachments/assets/a669d334-7820-4e28-8a05-5a9d745ddc42" alt="박동준" style="width:100px; height:100px;"> | <a href="https://github.com/Ahn-latte"><img src="https://avatars.githubusercontent.com/Ahn-latte" alt="안주형" style="width:100px; height:100px;"></a> | <a href="https://github.com/minseokheo"><img src="https://avatars.githubusercontent.com/minseokheo" alt="허민석" style="width:100px; height:100px;"></a> | <a href="https://github.com/leedoyoung6"><img src="https://avatars.githubusercontent.com/leedoyoung6" alt="이도영" style="width:100px; height:100px;"></a> | <a href="https://github.com/MinSeok1204"><img src="https://avatars.githubusercontent.com/MinSeok1204" alt="최민석" style="width:100px; height:100px;"></a> | <a href="https://github.com/airacle100"><img src="https://avatars.githubusercontent.com/airacle100" alt="윤정우" style="width:100px; height:100px;"></a> |
 | ---------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------- |
-| 박동준                                               | 안주형                                                   | 허민석                                              | 이도영                                                  | [최민석](https://github.com/MinSeok1204)             | [윤정우](https://github.com/airacle100)             |
+| [박동준](https://github.com/Poodlee)                                               | [안주형](https://github.com/Ahn-latte)                                                   | [허민석](https://github.com/minseokheo)                                              | [이도영](https://github.com/leedoyoung6)                                                  | [최민석](https://github.com/MinSeok1204)             | [윤정우](https://github.com/airacle100)             |
 
 
 ## Project Structure
