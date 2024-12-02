@@ -1,0 +1,11 @@
+/data
+/code
+/checkpoints
+/output
+/results
+/config
+wandb*
+*.log
+*.pyc
+*.ipynb
+wandb*
