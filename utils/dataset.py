@@ -91,7 +91,7 @@ class XRayDataset(Dataset):
                 labelnames += list(_labelnames[y])
             else:
                 filenames = list(_filenames[y])
-                labelnames = list(self._labelnames[y])
+                labelnames = list(_labelnames[y])
                                 
         return filenames, labelnames
     
@@ -128,7 +128,6 @@ class XRayDataset(Dataset):
         image_path = os.path.join(self.img_root, image_name)
         
         image = cv2.imread(image_path)
-        image = image / 255.
         
         label_name = self.labelnames[item]
         label_path = os.path.join(self.label_root, label_name)
@@ -154,17 +153,79 @@ class XRayDataset(Dataset):
             label[..., class_ind] = class_label
         
         if self.transforms is not None:
-            inputs = {"image": image, "mask": label} if self.is_train else {"image": image}
+            inputs = {"image": image, "mask": label}
             result = self.transforms(**inputs)
             
             image = result["image"]
-            label = result["mask"] if self.is_train else label
-
-        # to tenser will be done later
-        image = image.transpose(2, 0, 1)    # channel first 포맷으로 변경합니다.
-        label = label.transpose(2, 0, 1)
+            label = result["mask"]
         
-        image = torch.from_numpy(image).float()
-        label = torch.from_numpy(label).float()
+        # self.save_visualization(image, label, image_name)
+        # self.save_image_visualization(image, image_name)
+
+        return image, label
+    
+    def save_visualization(self, image, label, image_name):
+        # 이미지와 label을 시각화하여 저장
+        image_np = image.numpy().transpose(1, 2, 0) * 255  # channel last로 변환
+        image_np = image_np.astype(np.uint8)
+    
+        # 각 클래스에 대해 다른 색상으로 label을 시각화
+        for i in range(label.shape[0]):
+            mask = label[i].numpy()
+            color = (np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255))
+            image_np[mask > 0] = image_np[mask > 0] * 0.5 + np.array(color) * 0.5
+
+        # 결과 이미지 저장
+        save_path = os.path.join("visualizations_calcul", f"visual_{image_name}")
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        cv2.imwrite(save_path, image_np)
+        
+    def save_image_visualization(self, image, image_name):
+        # 이미지 시각화하여 저장
+        image_np = image.numpy().transpose(1, 2, 0) * 255  # channel last로 변환
+        image_np = image_np.astype(np.uint8)
+
+        # 결과 이미지 저장
+        save_path = os.path.join("visualizations_image", f"visual_{image_name}")
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        cv2.imwrite(save_path, image_np)
             
         return image, label
+    
+class SwinXRayDataset(XRayDataset):
+    def __init__(self, config=None, **kwargs):
+        img_size = config.get('img_size', 224) if config else 224
+        super().__init__(img_size=img_size, **kwargs)
+
+class SwinXRayInferenceDataset(XRayInferenceDataset):
+    def __init__(self, config=None, **kwargs):
+        img_size = config.get('img_size', 224) if config else 224
+        super().__init__(img_size=img_size, **kwargs)
+
+class BeitXRayDataset(XRayDataset):
+    def __init__(self, config=None, **kwargs):
+        img_size = config['model'].get('model_size', 640) if config else 640
+        super().__init__(img_size=img_size, **kwargs)
+        print(f"\nBEiT Dataset Info:")
+        print(f"Model input size: {self.img_size}x{self.img_size}")
+
+class BeitXRayInferenceDataset(XRayInferenceDataset):
+    def __init__(self, config=None, **kwargs):
+        img_size = config['model'].get('img_size', 640) if config else 640
+        super().__init__(img_size=img_size, **kwargs)
+        print(f"\nBEiT Inference Dataset Info:")
+        print(f"Model input size: {self.img_size}x{self.img_size}")
+
+class HRNetXRayDataset(XRayDataset):
+    def __init__(self, config=None, **kwargs):
+        img_size = config['model'].get('img_size', 512) if config else 512
+        super().__init__(img_size=img_size, **kwargs)
+        print(f"\nHRNet Dataset Info:")
+        print(f"Image size: {self.img_size}x{self.img_size}")
+
+class HRNetXRayInferenceDataset(XRayInferenceDataset):
+    def __init__(self, config=None, **kwargs):
+        img_size = config['model'].get('img_size', 512) if config else 512
+        super().__init__(img_size=img_size, **kwargs)
+        print(f"\nHRNet Inference Dataset Info:")
+        print(f"Input image size: {self.img_size}x{self.img_size}")

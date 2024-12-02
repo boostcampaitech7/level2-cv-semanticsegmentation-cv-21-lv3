@@ -1,0 +1,15 @@
+.
+|-- config
+|   `-- config.json
+|-- directory_structure.txt
+|-- models
+|   |-- __init__.py
+|   `-- model.py
+|-- requirements.txt
+|-- test.py
+|-- train.py
+`-- utils
+    |-- __init__.py
+    |-- dataset.py
+    |-- loss.py
+    `-- util.py
